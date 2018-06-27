@@ -39,13 +39,16 @@ public class KTableRepartitionerProcessorSupplier<K, KR, VR> implements Processo
 				{
 					K newKeyValue = mapper.apply(change.newValue);
 					// This is a more tricky story 
-					// I only want to be KR to be key of the new partition
+					// I only want KR to be key of the new partition.
+
 					// this wont work as we cant get a grab on the number of
 					// partitions of the intermediate topic here
 					// therefore the extractor/mapper has to extract the final K here already
-					// so we can savely publish a delete and the update 
+					// so we can savely publish a delete and the update
+
 					// we could skip the delete when we know we are in the same partition
 					// and dealing with the same KR and end up in the same partition
+
 					// IF they key equals, the intermediate key will equal which is used
 					// to derive the partition
 					if(oldKey.equals(newKeyValue))

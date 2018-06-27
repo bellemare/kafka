@@ -30,15 +30,6 @@ public class KTableJoinMergeProcessorSupplier<K0,V0,K,V,KO,VO> implements KTable
 		this.joiner = joiner;
 	}
 
-
-	public KTableJoinMergeProcessorSupplier(
-			KTableValueGetterSupplier<K0, V0> valueGetterSupplier,
-			KTableRangeValueGetterSupplier<K0, VO> valueGetterSupplier2,
-			ValueMapper<K0, K0> leftKeyExtractor2, ValueJoiner<V0, VO, V0> joiner2) {
-		// TODO Auto-generated constructor stub
-	}
-
-
 	@Override
     public Processor<K0, Change<V0>> get() {
         return new AbstractProcessor<K0, Change<V0>>() {

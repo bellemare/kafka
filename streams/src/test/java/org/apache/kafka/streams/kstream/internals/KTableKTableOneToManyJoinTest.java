@@ -24,6 +24,7 @@ import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.TopologyWrapper;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.KeyValueMapper;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
@@ -99,25 +100,35 @@ public class KTableKTableOneToManyJoinTest {
 
         // push two items to the primary stream. the other table is empty
 
+        // push two items to the other stream. this should produce two items.
+
         for (int i = 0; i < 2; i++) {
-            driver.process(topic1, expectedKeys[i], "X" + expectedKeys[i]);
+            driver.process(topic1, expectedKeys[i], expectedKeys[i] + ",X");
+            System.out.println("Table1-row = (" + expectedKeys[i] + ", " + expectedKeys[i] + ",X)" );
         }
         // pass tuple with null key, it will be discarded in join process
         //driver.process(topic1, null, "SomeVal");
         driver.flushState();
 
-        processor.checkAndClearProcessResult();
 
-        // push two items to the other stream. this should produce two items.
-
-        for (int i = 0; i < 2; i++) {
-            driver.process(topic2, expectedKeys[i], "1,YYYY");
+        for (int i = 5; i < 7; i++) {
+            driver.process(topic2, String.valueOf(i), "1,"+i+",YYYY");
+            System.out.println("Table2-row = (" + String.valueOf(i) + ", 1,"+i+",YYYY)" );
         }
         // pass tuple with null key, it will be discarded in join process
         //driver.process(topic2, null, "AnotherVal");
         driver.flushState();
 
-        processor.checkAndClearProcessResult("0:X0+Y0", "1:X1+Y1");
+        //processor.checkAndClearProcessResult("0:X0+Y0", "1:X1+Y1");
+
+
+
+
+        //processor.checkAndClearProcessResult();
+
+
+
+
         checkJoinedValues(getter, kv("0", "X0+Y0"), kv("1", "X1+Y1"));
 
 
@@ -212,7 +223,10 @@ public class KTableKTableOneToManyJoinTest {
         ValueMapper<String, String> keyExtractor = new ValueMapper<String, String>() {
             @Override
             public String apply(String value) {
-                return value.substring(0,1);
+                //Assuming format of: "foreignKey,primaryKey,metadata"
+                String[] ss = value.split(",");
+                System.out.println("Extracted data: " + ss);
+                return ss[0] + "-" + ss[1];
             }
         };
 
@@ -220,23 +234,29 @@ public class KTableKTableOneToManyJoinTest {
         ValueMapper<String, String> joinPrefixFaker = new ValueMapper<String, String>() {
             @Override
             public String apply(String value) {
+                System.out.println("joinPrefixFaker value = " + value);
                 return value;
             }
         };
 
         //I think this gets the left key out of the whole joined key experience...
-        //ie: "leftKey-rightKey" : "someValue"
+        //ie: "leftKeyForeign-rightKeyPrimary" : "someValue"
+        //Used to repartition the data correctly.
         ValueMapper<String, String> leftKeyExtractor = new ValueMapper<String, String>() {
             @Override
             public String apply(String value) {
-                return value.substring(0,1);
+                //Assumes key format of foreign-primary.
+                String[] ss = value.split("-");
+                System.out.println("leftKeyExtractor = " + ss);
+                return ss[0];
             }
         };
 
+        //TODO - Properly merge the string output.
         ValueJoiner<String, String, String> joiner = new ValueJoiner<String, String, String>() {
             @Override
             public String apply(final String value1, final String value2) {
-                return "someString";
+                return "value1=" + value1 + ",value2=" + value2;
             }
         };
 

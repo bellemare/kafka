@@ -514,7 +514,8 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
 
         @Override
         public Bytes peekNextKey() {
-            if (!hasNext()) {
+            //TODO - bellemare. It is NOT calling this.hasNext(), but rather the child hasNext (probably due to override!).
+            if (!super.hasNext()) {
                 throw new NoSuchElementException();
             }
             return next.key;
@@ -594,7 +595,7 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
 
     	private byte[] rawPrefix;
 
-		public RocksDbPrefixIterator(String name, RocksIterator iter, Bytes prefix) {
+		RocksDbPrefixIterator(String name, RocksIterator iter, Bytes prefix) {
 			super(name, iter);
 			this.rawPrefix = prefix.get();
             iter.seek(rawPrefix);
@@ -611,13 +612,14 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
             for (int i = 0; i < rawPrefix.length; i++) {
                 if (i == rawNextKey.length) {
                 	//rocks db should have skipped that one with seek()
-                    throw new ArrayIndexOutOfBoundsException("WTF just happend?");
+                    throw new ArrayIndexOutOfBoundsException("WTF just happened?");
                 }
 
                 if (rawNextKey[i] != rawPrefix[i]) {
                     return false;
                 }
             }
+            System.out.println("rawNextKey = " + rawNextKey.toString());
             return true;
             
         }
