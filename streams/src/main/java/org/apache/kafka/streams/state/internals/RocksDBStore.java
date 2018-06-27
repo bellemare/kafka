@@ -592,10 +592,11 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
     
     private class RocksDbPrefixIterator extends RocksDbIterator {
 
-    	private byte[] rawPrefix; 
-    
+    	private byte[] rawPrefix;
+
 		public RocksDbPrefixIterator(String name, RocksIterator iter, Bytes prefix) {
 			super(name, iter);
+			this.rawPrefix = prefix.get();
             iter.seek(rawPrefix);
             //TODO - bellemare - is this correct? I am not sure the scan actually scanned right...
 		}

@@ -103,7 +103,6 @@ public class CompositeReadOnlyKeyValueStore<K, V> implements ReadOnlyKeyValueSto
         throw new UnsupportedOperationException(getClass().getSimpleName() + " can't perform a prefix scan");
     }
 
-    @Override
     public long approximateNumEntries() {
         final List<ReadOnlyKeyValueStore<K, V>> stores = storeProvider.stores(storeName, storeType);
         long total = 0;

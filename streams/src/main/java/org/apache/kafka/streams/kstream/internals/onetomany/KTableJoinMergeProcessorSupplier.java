@@ -68,7 +68,10 @@ public class KTableJoinMergeProcessorSupplier<K0,V0,K,V,KO,VO> implements KTable
 
                     @Override
                     public void init(ProcessorContext context) {
-                    	/* initialize here?
+                        leftGetter.init(context);
+                        rightRepartitionedGetter.init(context);
+
+                        /* initialize here?
                     	leftGetter.init(context);
                     	rightRepartitionedGetter.init(context);
                     	*/
@@ -77,12 +80,17 @@ public class KTableJoinMergeProcessorSupplier<K0,V0,K,V,KO,VO> implements KTable
                     @Override
                     public V0 get(K0 key) {
                         V leftvalue = leftGetter.get(leftKeyExtractor.apply(key));
-                        VO rigthValue = rightRepartitionedGetter.get(key);
-                        if (leftvalue != null && rigthValue != null) { //INNER JOIN
-                            return joiner.apply(leftvalue, rigthValue);
+                        VO rightValue = rightRepartitionedGetter.get(key);
+                        if (leftvalue != null && rightValue != null) { //INNER JOIN
+                            return joiner.apply(leftvalue, rightValue);
                         } else {
                             return null;
                         }
+                    }
+
+                    @Override
+                    public void close() {
+                        //Do nothing.
                     }
                 };
             }

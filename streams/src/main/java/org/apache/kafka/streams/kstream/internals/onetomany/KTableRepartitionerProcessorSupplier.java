@@ -76,8 +76,8 @@ public class KTableRepartitionerProcessorSupplier<K, KR, VR> implements Processo
 			}
 		}
 
-		@Override
-		public void punctuate(long timestamp) {}
+//		@Override
+//		public void punctuate(long timestamp) {}
 
 		@Override
 		public void close() {}

@@ -42,9 +42,12 @@ import org.apache.kafka.streams.kstream.internals.onetomany.PartialKeyPartitione
 import org.apache.kafka.streams.kstream.internals.onetomany.RangeKeyValueGetterProviderAndProcessorSupplier;
 import org.apache.kafka.streams.processor.FailOnInvalidTimestamp;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
+import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
+import org.apache.kafka.streams.state.KeyValueBytesStoreSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.StoreBuilder;
 import org.apache.kafka.streams.state.Stores;
+import org.apache.kafka.streams.state.internals.RocksDbKeyValueBytesStoreSupplier;
 
 import java.util.Collections;
 import java.io.FileNotFoundException;
@@ -599,18 +602,21 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 
     @Override
     public <K0, V0, KO, VO> KTable<K0, V0> oneToManyJoin(KTable<KO, VO> other,
-            ValueMapper<VO, K> keyExtractor,
-            ValueMapper<K, K0> joinPrefixFaker,
-            ValueMapper<K0, K> leftKeyExtractor, ValueJoiner<V, VO, V0> joiner,
-            Serde<KO> keyOtherSerde,
-            Serde<VO> valueOtherSerde,
-            Serde<K0> joinKeySerde,
-            Serde<V0> joinValueSerde) {
+                                                         ValueMapper<VO, K> keyExtractor,
+                                                         ValueMapper<K, K0> joinPrefixFaker,
+                                                         ValueMapper<K0, K> leftKeyExtractor,
+                                                         ValueJoiner<V, VO, V0> joiner,
+                                                         Serde<KO> keyOtherSerde,
+                                                         Serde<VO> valueOtherSerde,
+                                                         Serde<K0> joinKeySerde,
+                                                         Serde<V0> joinValueSerde) {
 
         ((KTableImpl<?,?,?>) other).enableSendingOldValues();
         enableSendingOldValues();
 
-        String repartitionerName = topology.newName(REPARTITION_NAME);
+        InternalTopologyBuilder topology = builder.internalTopologyBuilder;
+
+        String repartitionerName = builder.newProcessorName(REPARTITION_NAME);
         final String repartitionTopicName = name + "-" + JOINOTHER_NAME;
 
         topology.addInternalTopic(repartitionTopicName);
@@ -622,50 +628,68 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         // repartition original => intermediate topic
         KTableRepartitionerProcessorSupplier<K, KO, VO> repartitionProcessor =
                 new KTableRepartitionerProcessorSupplier<>(keyExtractor);
-        
+
         topology.addProcessor(repartitionProcessorName, repartitionProcessor, ((AbstractStream<?>)other).sourceNodes.toArray(new String[0]));
 
-        PartialKeyPartitioner<K0, VO, K> partitioner = new PartialKeyPartitioner<>(leftKeyExtractor, keySerde, repartitionTopicName);
-        
+        //PartialKeyPartitioner<K0, VO, K> partitioner = new PartialKeyPartitioner<>(leftKeyExtractor, keySerde, repartitionTopicName);
+        PartialKeyPartitioner<K0, VO, K> partitioner = new PartialKeyPartitioner<>(leftKeyExtractor, keySerde);
+
         topology.addSink(repartitionSinkName, repartitionTopicName,
                 joinKeySerde.serializer(), valueOtherSerde.serializer(),
                 partitioner, repartitionProcessorName);
 
 
         // Re read partitioned topic and copartition with left
-        topology.addSource(repartitionSourceName, joinKeySerde.deserializer(), valueOtherSerde.deserializer(), repartitionTopicName);
+        //TODO - Are the nulls below okay?
+        topology.addSource(null, repartitionSourceName, null, joinKeySerde.deserializer(), valueOtherSerde.deserializer(), repartitionTopicName);
+        //topology.addSource(repartitionSourceName, joinKeySerde.deserializer(), valueOtherSerde.deserializer(), repartitionTopicName);
         LinkedList<String> sourcesNeedCopartitioning = new LinkedList<>();
         sourcesNeedCopartitioning.add(repartitionSourceName);
         sourcesNeedCopartitioning.addAll(sourceNodes);
-        
+
         topology.copartitionSources(sourcesNeedCopartitioning);
 
-        
-        String joinByRangeProcessor = topology.newName(BY_RANGE);
+
+        String joinByRangeProcessor = builder.newProcessorName(BY_RANGE);
 
 
         final RangeKeyValueGetterProviderAndProcessorSupplier<K0, V0, K, V, VO> joinThis =
                 new RangeKeyValueGetterProviderAndProcessorSupplier(repartitionTopicName, ((KTableImpl<?, ?, ?>) other).valueGetterSupplier(), leftKeyExtractor, joiner);
         topology.addProcessor(repartitionReceiverName, joinThis, repartitionSourceName);
 
-        StateStoreSupplier repartitionStateStore = Stores.create(repartitionTopicName)
-                .withKeys(joinKeySerde)
-                .withValues(valueOtherSerde)
-                .persistent()
-                .build();
 
-        topology.addStateStore(repartitionStateStore, repartitionReceiverName);
+        KeyValueBytesStoreSupplier rdbs = new RocksDbKeyValueBytesStoreSupplier(repartitionTopicName);
+
+        Materialized mat = Materialized.<K0,VO>as(rdbs)
+                .withCachingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
+                .withLoggingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
+                .withKeySerde(joinKeySerde)
+                .withValueSerde(valueOtherSerde);
+
+        MaterializedInternal<K0, VO, KeyValueStore<Bytes, byte[]>> materializedInternal = new MaterializedInternal(mat);
+
+        //materializedInternal.generateStoreNameIfNeeded(builder, );
+
+        topology.addStateStore(new KeyValueStoreMaterializer<K0,VO>(materializedInternal).materialize(), repartitionReceiverName);
+
+// TODO - AB - Replaced this with above.
+//        StateStoreSupplier repartitionStateStore = Stores.create(repartitionTopicName)
+//                .withKeys(joinKeySerde)
+//                .withValues(valueOtherSerde)
+//                .persistent()
+//                .build();
+//        topology.addStateStore(repartitionStateStore, repartitionReceiverName);
 
         KTableKTableRangeJoin<K0, V0, K, V, VO> joinByRange = new KTableKTableRangeJoin<K0, V0, K, V, VO>(joinThis.valueGetterSupplier(), joiner, joinPrefixFaker);
         topology.addProcessor(joinByRangeProcessor, joinByRange, this.name);
 
-        String joinOutputName = topology.newName(name + "-JOIN_OUTPUT");
+        String joinOutputName = builder.newStoreName(name + "-JOIN_OUTPUT");
         String joinOutputTableSource = joinOutputName + "-TABLESOURCE";
 
         KTableJoinMergeProcessorSupplier<K0, V0, K, V, KO, VO> kts = new KTableJoinMergeProcessorSupplier<K0, V0, K, V, KO, VO>(this.valueGetterSupplier(), joinThis.valueGetterSupplier(), leftKeyExtractor, joiner);
         topology.addProcessor(joinOutputTableSource, kts, joinByRangeProcessor, repartitionReceiverName);
-        return new KTableImpl<K0,V,V0>(topology, joinOutputTableSource, kts, joinKeySerde, joinValueSerde,new HashSet<String>(sourcesNeedCopartitioning),null,false);
 
-	}
-
+        //TODO - Bellemare - figure out the StreamsGraphNode business.
+        return new KTableImpl<K0,V,V0>(builder, joinOutputTableSource, kts, joinKeySerde, joinValueSerde, new HashSet<String>(sourcesNeedCopartitioning),null, false, null);
+    }
 }
