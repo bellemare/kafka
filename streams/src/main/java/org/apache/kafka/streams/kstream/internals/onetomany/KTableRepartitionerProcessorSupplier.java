@@ -2,9 +2,11 @@ package org.apache.kafka.streams.kstream.internals.onetomany;
 
 import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.kstream.internals.Change;
+import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
+import org.apache.kafka.streams.processor.internals.metrics.StreamsMetricsImpl;
 
 public class KTableRepartitionerProcessorSupplier<K, KR, VR> implements ProcessorSupplier<KR, Change<VR>> {
 	
@@ -19,13 +21,12 @@ public class KTableRepartitionerProcessorSupplier<K, KR, VR> implements Processo
 		return new UnbindChangeProcessor(); 
 	}
 	
-	private class UnbindChangeProcessor implements Processor<KR, Change<VR>>
+	private class UnbindChangeProcessor extends AbstractProcessor<KR, Change<VR>>
 	{
-		private ProcessorContext context;
-		
+
 		@Override
-		public void init(ProcessorContext context) {
-			this.context = context;
+		public void init(final ProcessorContext context) {
+			super.init(context);
 		}
 
 		@Override
@@ -49,17 +50,17 @@ public class KTableRepartitionerProcessorSupplier<K, KR, VR> implements Processo
 					// to derive the partition
 					if(oldKey.equals(newKeyValue))
 					{
-						context.forward(newKeyValue, change.newValue);
+						context().forward(newKeyValue, change.newValue);
 					}
 					else  
 					{
-						context.forward(oldKey, null);
-						context.forward(newKeyValue, change.newValue);
+						context().forward(oldKey, null);
+						context().forward(newKeyValue, change.newValue);
 					}
 				}
 				else
 				{
-					context.forward(oldKey, null);
+					context().forward(oldKey, null);
 				}
 			}
 			else
@@ -67,7 +68,7 @@ public class KTableRepartitionerProcessorSupplier<K, KR, VR> implements Processo
 				if(change.newValue != null)
 				{
 					K newKeyValue = mapper.apply(change.newValue);
-					context.forward(newKeyValue, change.newValue);
+					context().forward(newKeyValue, change.newValue);
 				}
 				else
 				{
@@ -83,6 +84,4 @@ public class KTableRepartitionerProcessorSupplier<K, KR, VR> implements Processo
 		public void close() {}
 		
 	}
-
-
 }

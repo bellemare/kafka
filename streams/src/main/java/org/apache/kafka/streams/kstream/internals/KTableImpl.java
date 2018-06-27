@@ -629,7 +629,12 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         KTableRepartitionerProcessorSupplier<K, KO, VO> repartitionProcessor =
                 new KTableRepartitionerProcessorSupplier<>(keyExtractor);
 
-        topology.addProcessor(repartitionProcessorName, repartitionProcessor, ((AbstractStream<?>)other).sourceNodes.toArray(new String[0]));
+//        //TODO - Tries to process a non-Change element as a Change, and fails.
+//        for (Object elem: ((AbstractStream<?>)other).sourceNodes.toArray(new String[0])) {
+//            System.out.println("Trying to read the state topic from : " + elem.toString());
+//        }
+
+        topology.addProcessor(repartitionProcessorName, repartitionProcessor,((AbstractStream<?>)other).name );
 
         //PartialKeyPartitioner<K0, VO, K> partitioner = new PartialKeyPartitioner<>(leftKeyExtractor, keySerde, repartitionTopicName);
         PartialKeyPartitioner<K0, VO, K> partitioner = new PartialKeyPartitioner<>(leftKeyExtractor, keySerde);
