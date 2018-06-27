@@ -27,6 +27,7 @@ import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.errors.ProcessorStateException;
 import org.apache.kafka.streams.processor.StateRestoreListener;
+import org.apache.kafka.streams.processor.internals.RecordCollector;
 import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.RocksDBConfigSetter;
 import org.apache.kafka.test.InternalMockProcessorContext;
@@ -46,6 +47,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.io.IOException;
+
+import org.rocksdb.Options;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.junit.Assert.assertEquals;
@@ -60,6 +64,8 @@ public class RocksDBStoreTest {
     private RocksDBStore rocksDBStore;
     private InternalMockProcessorContext context;
     private File dir;
+
+	
 
     @Before
     public void setUp() {
@@ -343,6 +349,40 @@ public class RocksDBStoreTest {
         }
 
         assertThat(keys, equalTo(Utils.mkSet("2", "3")));
+    }
+    
+    @Test
+    public void shouldPrefixScan() {
+        List<KeyValue<String, String>> entries = new ArrayList<>();
+        entries.add(new KeyValue<>("aaa", "a"));
+        entries.add(new KeyValue<>("aab", "b"));
+        entries.add(new KeyValue<>("a", "before aa"));
+        entries.add(new KeyValue<>("aa", "a"));
+        entries.add(new KeyValue<>("aac", "c"));
+        entries.add(new KeyValue<>("abc", "after aa"));
+        
+
+        subject.init(context, subject);
+        subject.putAll(entries);
+        subject.flush();
+
+        KeyValueIterator<String, String> results = null;
+        results = subject.prefixScan("aa");
+        
+        KeyValue<String, String> element = results.next();
+        assertEquals(element.key, "aa");
+        assertEquals(element.value, "a");
+        element = results.next();
+        assertEquals(element.key, "aaa");
+        assertEquals(element.value, "a");
+        element = results.next();
+        assertEquals(element.key, "aab");
+        assertEquals(element.value, "b");
+        element = results.next();
+        assertEquals(element.key, "aac");
+        assertEquals(element.value, "c");
+        
+        assertTrue(!results.hasNext());
     }
 
 

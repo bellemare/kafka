@@ -103,4 +103,9 @@ public class NoOpReadOnlyStore<K, V>
         return open;
     }
 
+	@Override
+	public KeyValueIterator<K, V> prefixScan(K prefix) {
+		return null;
+	}
+
 }
