@@ -366,6 +366,18 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
         return rocksDbIterator;
     }
 
+    @Override
+    public KeyValueIterator<Bytes, byte[]> prefixScan(Bytes prefix) {
+        Objects.requireNonNull(prefix, "prefix cannot be null");
+        validateStoreOpen();
+
+        // query rocksdb
+        final RocksDbPrefixIterator rocksDbPrefixIterator = new RocksDbPrefixIterator(name, db.newIterator(), prefix);
+        openIterators.add(rocksDbPrefixIterator);
+
+        return rocksDbPrefixIterator;
+    }
+
     /**
      * Return an approximate count of key-value mappings in this store.
      *
@@ -582,12 +594,10 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
 
     	private byte[] rawPrefix; 
     
-		public RocksDbPrefixIterator(String name, RocksIterator newIterator,
-				StateSerdes<K, V> serdes, K prefix) {
-			super(name, newIterator, serdes);
-			rawPrefix = serdes.rawKey(prefix);
-			newIterator.seek(rawPrefix);
-			
+		public RocksDbPrefixIterator(String name, RocksIterator iter, Bytes prefix) {
+			super(name, iter);
+            iter.seek(rawPrefix);
+            //TODO - bellemare - is this correct? I am not sure the scan actually scanned right...
 		}
 		
 		@Override
@@ -596,7 +606,7 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
             	return false;
             }
             
-            byte[] rawNextKey = super.peekRawKey();
+            byte[] rawNextKey = super.peekNextKey().get();
             for (int i = 0; i < rawPrefix.length; i++) {
                 if (i == rawNextKey.length) {
                 	//rocks db should have skipped that one with seek()
@@ -611,18 +621,4 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
             
         }
     }
-
-	@Override
-	public KeyValueIterator<K, V> prefixScan(K prefix) {
-		 Objects.requireNonNull(prefix, "prefix cannot be null");
-	     validateStoreOpen();
-
-	     // query rocksdb
-	     final RocksDBStore<K, V>.RocksDbPrefixIterator rocksDBRangeIterator = new RocksDbPrefixIterator(name, db.newIterator(), serdes, prefix);
-	        openIterators.add(rocksDBRangeIterator);
-	        return rocksDBRangeIterator;
-	}
-    
-
-    
 }
