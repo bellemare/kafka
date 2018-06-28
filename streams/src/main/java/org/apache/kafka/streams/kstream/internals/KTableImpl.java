@@ -84,6 +84,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 
     private static final String TOSTREAM_NAME = "KTABLE-TOSTREAM-";
 
+    public static final String BY_RANGE = "KTABLE-JOIN-BYRANGE-";
+
     private final ProcessorSupplier<?, ?> processorSupplier;
 
     private final KeyValueMapper<K, V, String> defaultKeyValueMapper;
