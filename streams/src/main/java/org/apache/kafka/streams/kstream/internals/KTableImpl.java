@@ -914,7 +914,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 .withKeySerde(joinKeySerde)
                 .withValueSerde(valueOtherSerde);
 
-        MaterializedInternal<K0, VO, KeyValueStore<Bytes, byte[]>> materializedInternal = new MaterializedInternal(mat);
+        MaterializedInternal<K0, VO, KeyValueStore<Bytes, byte[]>> materializedInternal = new MaterializedInternal(mat, builder, "SOMEFOO");
         topology.addStateStore(new KeyValueStoreMaterializer<K0,VO>(materializedInternal).materialize(), joinThisName);
 
         //Performs Left-driven updates (ie: new One, updates the Many).
@@ -950,7 +950,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 .withKeySerde(joinKeySerde)
                 .withValueSerde(valueOtherSerde);
 
-        topology.addStateStore(new KeyValueStoreMaterializer<K0,VO>(new MaterializedInternal(materia)).materialize(), joinMergeName);
+        topology.addStateStore(new KeyValueStoreMaterializer<K0,VO>(new MaterializedInternal(materia, builder, "SOMEFOO")).materialize(), joinMergeName);
 
         topology.connectProcessorAndStateStores(joinThisName, valueGetterSupplier().storeNames());
         topology.connectProcessorAndStateStores(joinMergeName, internalQueryableName);
