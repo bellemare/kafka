@@ -107,7 +107,7 @@ public class KTableKTableOneToManyJoinTest {
         driver.flushState();
 
 
-        for (int i = 5; i < 7; i++) {
+        for (int i = 5; i < 8; i++) {
             driver.process(topic2, String.valueOf(i), "1,"+i+",YYYY");
             System.out.println("Table2-row = (" + String.valueOf(i) + ", 1,"+i+",YYYY)" );
         }
@@ -115,20 +115,10 @@ public class KTableKTableOneToManyJoinTest {
         //driver.process(topic2, null, "AnotherVal");
         driver.flushState();
 
-        //processor.checkAndClearProcessResult("0:X0+Y0", "1:X1+Y1");
+        processor.checkAndClearProcessResult("5:value1=1,X,value2=1,5,YYYY", "6:value1=1,X,value2=1,6,YYYY", "7:value1=1,X,value2=1,7,YYYY");
 
+        checkJoinedValues(getter, kv("5", "value1=1,X,value2=1,5,YYYY"), kv("6", "value1=1,X,value2=1,6,YYYY"), kv("6","value1=1,X,value2=1,6,YYYY"));
 
-
-
-        //processor.checkAndClearProcessResult();
-
-
-
-
-        checkJoinedValues(getter, kv("0", "X0+Y0"), kv("1", "X1+Y1"));
-
-
-//
 //        // push all four items to the primary stream. this should produce two items.
 //
 //        for (final int expectedKey : expectedKeys) {

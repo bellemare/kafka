@@ -838,50 +838,5 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 internalQueryableName,
                 internalQueryableName != null,
                 kTableKTableJoinNode);
-
-        /*
-
-        final KTableKTableJoinMerger<K, R> joinMerge = new KTableKTableJoinMerger<>(
-            new KTableImpl<K, V, R>(builder, joinThisName, joinThis, sourceNodes, this.queryableStoreName, false, null),
-            new KTableImpl<K, V1, R>(builder, joinOtherName, joinOther, ((KTableImpl<K, ?, ?>) other).sourceNodes,
-                                     ((KTableImpl<K, ?, ?>) other).queryableStoreName, false, null),
-            internalQueryableName
-        );
-
-        final KTableKTableJoinNode.KTableKTableJoinNodeBuilder kTableJoinNodeBuilder = KTableKTableJoinNode.kTableKTableJoinNodeBuilder();
-
-        // only materialize if specified in Materialized
-        if (materializedInternal != null) {
-            kTableJoinNodeBuilder.withMaterializedInternal(materializedInternal);
-        }
-        kTableJoinNodeBuilder.withNodeName(joinMergeName);
-
-        ProcessorParameters joinThisProcessorParameters = new ProcessorParameters(joinThis, joinThisName);
-        ProcessorParameters joinOtherProcessorParameters = new ProcessorParameters(joinOther, joinOtherName);
-        ProcessorParameters joinMergeProcessorParameters = new ProcessorParameters(joinMerge, joinMergeName);
-
-        kTableJoinNodeBuilder.withJoinMergeProcessorParameters(joinMergeProcessorParameters)
-            .withJoinOtherProcessorParameters(joinOtherProcessorParameters)
-            .withJoinThisProcessorParameters(joinThisProcessorParameters)
-            .withJoinThisStoreNames(valueGetterSupplier().storeNames())
-            .withJoinOtherStoreNames(((KTableImpl) other).valueGetterSupplier().storeNames());
-
-        KTableKTableJoinNode kTableKTableJoinNode = kTableJoinNodeBuilder.build();
-        addGraphNode(kTableKTableJoinNode);
-
-        builder.internalTopologyBuilder.addProcessor(joinThisName, joinThis, this.name);
-        builder.internalTopologyBuilder.addProcessor(joinOtherName, joinOther, ((KTableImpl) other).name);
-        builder.internalTopologyBuilder.addProcessor(joinMergeName, joinMerge, joinThisName, joinOtherName);
-        builder.internalTopologyBuilder.connectProcessorAndStateStores(joinThisName, ((KTableImpl) other).valueGetterSupplier().storeNames());
-        builder.internalTopologyBuilder.connectProcessorAndStateStores(joinOtherName, valueGetterSupplier().storeNames());
-
-        return new KTableImpl<>(builder,
-                                joinMergeName,
-                                joinMerge,
-                                allSourceNodes,
-                                internalQueryableName,
-                                internalQueryableName != null,
-                                kTableKTableJoinNode);
-         */
     }
 }
