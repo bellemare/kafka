@@ -600,95 +600,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         return sendOldValues;
     }
 
-//    @Override
-//    public <K0, V0, KR, VR> KTable<K0, V0> oneToManyJoin(KTable<KR, VR> other,
-//                                                         ValueMapper<VR, K> keyExtractor,
-//                                                         ValueMapper<K, K0> joinPrefixFaker,
-//                                                         ValueMapper<K0, K> leftKeyExtractor,
-//                                                         ValueMapper<KR, K> rightKeyExtractor,
-//                                                         ValueJoiner<V, VR, V0> joiner,
-//                                                         Serde<KR> keyOtherSerde,
-//                                                         Serde<VR> valueOtherSerde,
-//                                                         Serde<K0> joinKeySerde,
-//                                                         Serde<V0> joinValueSerde) {
-//
-//        ((KTableImpl<?,?,?>) other).enableSendingOldValues();
-//        enableSendingOldValues();
-//
-//        InternalTopologyBuilder topology = builder.internalTopologyBuilder;
-//
-//        String repartitionerName = builder.newProcessorName(REPARTITION_NAME);
-//        final String repartitionTopicName = name + "-" + JOINOTHER_NAME;
-//
-//        topology.addInternalTopic(repartitionTopicName);
-//        final String repartitionProcessorName = repartitionerName + "-" + SELECT_NAME;
-//        final String repartitionSourceName = repartitionerName + "-source";
-//        final String repartitionSinkName = repartitionerName + "-sink";
-//        final String repartitionReceiverName = repartitionerName + "-table";
-//
-//        // repartition original => intermediate topic
-//        KTableRepartitionerProcessorSupplier<K, KR, VR> repartitionProcessor =
-//                new KTableRepartitionerProcessorSupplier<>(keyExtractor);
-//
-//        //Rekeys the data.
-//        topology.addProcessor(repartitionProcessorName, repartitionProcessor,((AbstractStream<?>)other).name );
-//
-//        //Partitions the data according to the prefix.
-//        PartialKeyPartitioner<K0, VR, K> partitioner = new PartialKeyPartitioner<>(leftKeyExtractor, keySerde);
-//
-//        topology.addSink(repartitionSinkName, repartitionTopicName,
-//                joinKeySerde.serializer(), valueOtherSerde.serializer(),
-//                partitioner, repartitionProcessorName);
-//
-//        // Re read partitioned topic and copartition with left
-//        //TODO - Are the nulls below okay?
-//        topology.addSource(null, repartitionSourceName, null, joinKeySerde.deserializer(), valueOtherSerde.deserializer(), repartitionTopicName);
-//        //topology.addSource(repartitionSourceName, joinKeySerde.deserializer(), valueOtherSerde.deserializer(), repartitionTopicName);
-//        LinkedList<String> sourcesNeedCopartitioning = new LinkedList<>();
-//        sourcesNeedCopartitioning.add(repartitionSourceName);
-//        sourcesNeedCopartitioning.addAll(sourceNodes);
-//
-//        topology.copartitionSources(sourcesNeedCopartitioning);
-//        String joinByRangeProcessor = builder.newProcessorName(BY_RANGE);
-//
-//        //What the fuck does this one doooooo?
-//        //TODO - Reduce this one to just joining ONLY right events on left, post partitioning. Will need to use a rightKeyGetter.
-//        //TODO - Review and use the Ktable Inner Join as a model for how to make this work.
-//        final RangeKeyValueGetterProviderAndProcessorSupplier<K0, V0, K, V, VR> joinThis =
-//                new RangeKeyValueGetterProviderAndProcessorSupplier(repartitionTopicName, ((KTableImpl<?, ?, ?>) other).valueGetterSupplier(), leftKeyExtractor, joiner);
-//        topology.addProcessor(repartitionReceiverName, joinThis, repartitionSourceName);
-//
-//        KeyValueBytesStoreSupplier rdbs = new RocksDbKeyValueBytesStoreSupplier(repartitionTopicName);
-//
-//        Materialized mat = Materialized.<K0,VO>as(rdbs)
-//                .withCachingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
-//                .withLoggingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
-//                .withKeySerde(joinKeySerde)
-//                .withValueSerde(valueOtherSerde);
-//
-//        MaterializedInternal<K0, VR, KeyValueStore<Bytes, byte[]>> materializedInternal = new MaterializedInternal(mat);
-//
-//        topology.addStateStore(new KeyValueStoreMaterializer<K0,VR>(materializedInternal).materialize(), repartitionReceiverName);
-//
-//        //Performs Left-driven updates (ie: new One, updates the Many).
-//        KTableKTableRangeJoin<K0, V0, K, V, VR> joinByRange = new KTableKTableRangeJoin<K0, V0, K, V, VR>(joinThis.valueGetterSupplier(), joiner, joinPrefixFaker);
-//        topology.addProcessor(joinByRangeProcessor, joinByRange, this.name);
-//
-//        String joinOutputName = builder.newStoreName(name + "-JOIN_OUTPUT");
-//        String joinOutputTableSource = joinOutputName + "-TABLESOURCE";
-//
-//        //????? What does this one do?
-//        //Need to listen to all RIGHT events.
-//        //Need to execute joiner logic from RIGHT side.
-//        //Uses the repartitioned data because it is co-located with the required left elements.
-//        KTableJoinMergeProcessorSupplier<K0, V0, K, V, KR, VR> kts = new KTableJoinMergeProcessorSupplier<K0, V0, K, V, KR, VR>(this.valueGetterSupplier(), joinThis.valueGetterSupplier(), leftKeyExtractor, joiner);
-//        topology.addProcessor(joinOutputTableSource, kts, joinByRangeProcessor, repartitionReceiverName);
-//
-//        //TODO - Bellemare - figure out the StreamsGraphNode business.
-//        return new KTableImpl<K0,V,V0>(builder, joinOutputTableSource, kts, joinKeySerde, joinValueSerde, new HashSet<String>(sourcesNeedCopartitioning),null, false, null);
-//    }
 
-
+    //Currently, the left side of the join contains the one.
+    //The right side contains the many.
     @Override
     public <K0, V0, KO, VO> KTable<K0, V0> oneToManyJoin(KTable<KO, VO> other,
                                                          ValueMapper<VO, K> keyExtractor,
@@ -767,12 +681,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         String joinOutputName = builder.newStoreName(name + "-JOIN_OUTPUT");
         String joinOutputTableSource = joinOutputName + "-TABLESOURCE";
 
-        //????? What does this one do?
-        //TODO - Why is there a joiner in here? Shouldn't everything be joined by this point??
-        //Uses the repartitioned data because it is co-located with the required left elements.
-//        KTableJoinMergeProcessorSupplier<K0, V0, K, V, KO, VO> kts = new KTableJoinMergeProcessorSupplier<K0, V0, K, V, KO, VO>(this.valueGetterSupplier(), joinThis.valueGetterSupplier(), leftKeyExtractor, joiner);
-//        topology.addProcessor(joinOutputTableSource, kts, joinByRangeName, joinThisName);
-
         KTableImpl<K0, V, V0> myThis = new KTableImpl<>(builder, joinThisName, joinThis, sourceNodes, this.queryableStoreName, false, null);
         KTableImpl<K0, V, V0> myThat = new KTableImpl<>(builder, joinByRangeName, joinByRange, ((KTableImpl<K, ?, ?>) other).sourceNodes,
                 ((KTableImpl<K, ?, ?>) other).queryableStoreName, false, null);
@@ -807,16 +715,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 
         KTableKTableJoinNode kTableKTableJoinNode = kTableJoinNodeBuilder.build();
         addGraphNode(kTableKTableJoinNode);
-
-//        //TODO - Bellemare - figure out the StreamsGraphNode business.
-//        return new KTableImpl<K0,V,V0>(
-//                builder,
-//                joinOutputTableSource,
-//                kts,
-//                joinKeySerde,
-//                joinValueSerde,
-//                new HashSet<String>(sourcesNeedCopartitioning),null, false, null);
-
 
         topology.addProcessor(joinMergeName, joinMerge, joinThisName, joinByRangeName);
 

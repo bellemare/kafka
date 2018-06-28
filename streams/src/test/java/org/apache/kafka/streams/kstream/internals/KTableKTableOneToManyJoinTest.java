@@ -119,57 +119,6 @@ public class KTableKTableOneToManyJoinTest {
 
         checkJoinedValues(getter, kv("5", "value1=1,X,value2=1,5,YYYY"), kv("6", "value1=1,X,value2=1,6,YYYY"), kv("6","value1=1,X,value2=1,6,YYYY"));
 
-//        // push all four items to the primary stream. this should produce two items.
-//
-//        for (final int expectedKey : expectedKeys) {
-//            driver.process(topic1, expectedKey, "XX" + expectedKey);
-//        }
-//        driver.flushState();
-//
-//        processor.checkAndClearProcessResult("0:XX0+Y0", "1:XX1+Y1");
-//        checkJoinedValues(getter, kv(0, "XX0+Y0"), kv(1, "XX1+Y1"));
-//
-//        // push all items to the other stream. this should produce four items.
-//        for (final int expectedKey : expectedKeys) {
-//            driver.process(topic2, expectedKey, "YY" + expectedKey);
-//        }
-//        driver.flushState();
-//
-//        processor.checkAndClearProcessResult("0:XX0+YY0", "1:XX1+YY1", "2:XX2+YY2", "3:XX3+YY3");
-//        checkJoinedValues(getter, kv(0, "XX0+YY0"), kv(1, "XX1+YY1"), kv(2, "XX2+YY2"), kv(3, "XX3+YY3"));
-//
-//        // push all four items to the primary stream. this should produce four items.
-//
-//        for (final int expectedKey : expectedKeys) {
-//            driver.process(topic1, expectedKey, "X" + expectedKey);
-//        }
-//        driver.flushState();
-//
-//        processor.checkAndClearProcessResult("0:X0+YY0", "1:X1+YY1", "2:X2+YY2", "3:X3+YY3");
-//        checkJoinedValues(getter, kv(0, "X0+YY0"), kv(1, "X1+YY1"), kv(2, "X2+YY2"), kv(3, "X3+YY3"));
-//
-//        // push two items with null to the other stream as deletes. this should produce two item.
-//
-//        for (int i = 0; i < 2; i++) {
-//            driver.process(topic2, expectedKeys[i], null);
-//        }
-//        driver.flushState();
-//
-//        processor.checkAndClearProcessResult("0:null", "1:null");
-//        checkJoinedValues(getter, kv(0, null), kv(1, null));
-//
-//        // push all four items to the primary stream. this should produce two items.
-//
-//        for (final int expectedKey : expectedKeys) {
-//            driver.process(topic1, expectedKey, "XX" + expectedKey);
-//        }
-//        driver.flushState();
-//
-//        processor.checkAndClearProcessResult("2:XX2+YY2", "3:XX3+YY3");
-//        checkJoinedValues(getter, kv(2, "XX2+YY2"), kv(3, "XX3+YY3"));
-//
-//        driver.process(topic1, null, "XX" + 1);
-//        checkJoinedValues(getter, kv(2, "XX2+YY2"), kv(3, "XX3+YY3"));
 
     }
 
@@ -192,6 +141,7 @@ public class KTableKTableOneToManyJoinTest {
 			ValueMapper<VO, K> keyExtractor,
 			ValueMapper<K, K0> joinPrefixFaker,
 			ValueMapper<K0, K> leftKeyExtractor,
+			ValueMapper<K0, K> rightKeyExtractor,
 			ValueJoiner<V, VO, V0> joiner,
 			Serde<KO> keyOtherSerde,
 			Serde<VO> valueOtherSerde,
