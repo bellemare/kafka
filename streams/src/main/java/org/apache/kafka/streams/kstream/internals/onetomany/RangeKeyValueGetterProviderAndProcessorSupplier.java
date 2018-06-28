@@ -16,11 +16,11 @@ import org.apache.kafka.streams.state.KeyValueStore;
 public class RangeKeyValueGetterProviderAndProcessorSupplier<K0, V0, K, V, VO> implements ProcessorSupplier<K0, VO>
 {
 
-    String topicName;
-    ValueMapper<K0, K> leftKeyExtractor;
-    ValueMapper<K0, K> rightKeyExtractor;
-    KTableValueGetterSupplier<K, V> leftValueGetterSupplier;
-    ValueJoiner<V, VO, V0> joiner;
+    private final String topicName;
+    private final ValueMapper<K0, K> leftKeyExtractor;
+    private final ValueMapper<K0, K> rightKeyExtractor;
+    private final KTableValueGetterSupplier<K, V> leftValueGetterSupplier;
+    private final ValueJoiner<V, VO, V0> joiner;
 
     public RangeKeyValueGetterProviderAndProcessorSupplier(String topicName,
                                                            KTableValueGetterSupplier<K, V> leftValueGetter ,
@@ -76,7 +76,7 @@ public class RangeKeyValueGetterProviderAndProcessorSupplier<K0, V0, K, V, VO> i
                 if (oldVal != null && value2 != null)
                     oldValue = joiner.apply(value2, oldVal);
 
-                //TODO - Bellemare - Forward with the Real Key. Am I using the right generic types?
+                //TODO - Bellemare - Am I using the right generic types in this class?
                 if(oldValue != null || newValue != null) {
                     K realKey = rightKeyExtractor.apply(key);
                     context().forward(realKey, new Change<>(newValue, oldValue));

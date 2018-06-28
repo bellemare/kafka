@@ -600,6 +600,15 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         return sendOldValues;
     }
 
+    /*
+        private <V1, R> KTable<K, R> buildJoin(final AbstractStream<K> other,
+                                           final ValueJoiner<? super V, ? super V1, ? extends R> joiner,
+                                           final boolean leftOuter,
+                                           final boolean rightOuter,
+                                           final String joinMergeName,
+                                           final String internalQueryableName,
+                                           final MaterializedInternal materializedInternal) {
+     */
 
     //Currently, the left side of the join contains the one.
     //The right side contains the many.
@@ -646,7 +655,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         // Re read partitioned topic and copartition with left
         //TODO - Are the nulls below okay?
         topology.addSource(null, repartitionSourceName, null, joinKeySerde.deserializer(), valueOtherSerde.deserializer(), repartitionTopicName);
-        //topology.addSource(repartitionSourceName, joinKeySerde.deserializer(), valueOtherSerde.deserializer(), repartitionTopicName);
         LinkedList<String> sourcesNeedCopartitioning = new LinkedList<>();
         sourcesNeedCopartitioning.add(repartitionSourceName);
         sourcesNeedCopartitioning.addAll(sourceNodes);
@@ -658,6 +666,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         // 1) Loads the data into a stateStore for the following rangescan.
         // 2) Drives the join logic from the right. Uses the leftKeyExtractor to get partial key, then uses the partial key to get the left value from this store.
         //    Applies the join logic.
+        //    Returns the data keyed on the RightKey, which is the original key.
+        //TODO - Do I need to repartition the rekeyed data now?
         final RangeKeyValueGetterProviderAndProcessorSupplier<K0, V0, K, V, VO> joinThis =
                 new RangeKeyValueGetterProviderAndProcessorSupplier(repartitionTopicName, ((KTableImpl<?, ?, ?>) this).valueGetterSupplier(), leftKeyExtractor, rightKeyExtractor, joiner);
         topology.addProcessor(joinThisName, joinThis, repartitionSourceName);
@@ -703,6 +713,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         }
         kTableJoinNodeBuilder.withNodeName(joinMergeName);
 
+        //TODO I think there are some more processors to add... like joinByRangeName
         ProcessorParameters joinThisProcessorParameters = new ProcessorParameters(joinThis, joinThisName);
         ProcessorParameters joinOtherProcessorParameters = new ProcessorParameters(joinByRange, joinByRangeName);
         ProcessorParameters joinMergeProcessorParameters = new ProcessorParameters(joinMerge, joinMergeName);
@@ -728,6 +739,15 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 .withValueSerde(valueOtherSerde);
 
         topology.addStateStore(new KeyValueStoreMaterializer<K0,VO>(new MaterializedInternal(materia)).materialize(), joinMergeName);
+
+        //TODO what do I even do with this.
+        //topology.connectProcessorAndStateStores(joinByRangeName, ((KTableImpl) other).valueGetterSupplier().storeNames());
+
+
+        topology.connectProcessorAndStateStores(joinThisName, valueGetterSupplier().storeNames());
+        topology.connectProcessorAndStateStores(joinMergeName, internalQueryableName);
+        topology.connectProcessorAndStateStores(joinByRangeName, repartitionTopicName);
+
 
         return new KTableImpl<>(builder,
                 joinMergeName,

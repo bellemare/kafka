@@ -16,11 +16,16 @@
  */
 package org.apache.kafka.streams.kstream.internals;
 
+import org.apache.kafka.common.serialization.IntegerSerializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.TopologyTestDriver;
 import org.apache.kafka.streams.TopologyWrapper;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.KTable;
@@ -31,12 +36,15 @@ import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.processor.MockProcessorContext;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.StateStore;
+import org.apache.kafka.streams.processor.internals.ProcessorTopologyTest;
 import org.apache.kafka.streams.processor.internals.testutil.LogCaptureAppender;
 import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.test.ConsumerRecordFactory;
 import org.apache.kafka.test.KStreamTestDriver;
 import org.apache.kafka.test.MockProcessor;
 import org.apache.kafka.test.MockProcessorSupplier;
 import org.apache.kafka.test.MockValueJoiner;
+import org.apache.kafka.test.StreamsTestUtils;
 import org.apache.kafka.test.TestUtils;
 import org.junit.Before;
 import org.junit.Rule;
@@ -46,6 +54,7 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Properties;
 import java.util.Set;
 
 import static org.apache.kafka.test.StreamsTestUtils.getMetricByName;
@@ -60,65 +69,90 @@ public class KTableKTableOneToManyJoinTest {
 
     private final Serde<String> stringSerde = Serdes.String();
     private final Consumed<String, String> consumed = Consumed.with(stringSerde, stringSerde);
+    private final ConsumerRecordFactory<String, String> recordFactory = new ConsumerRecordFactory<>(new StringSerializer(), new StringSerializer());
     //private final Materialized<Integer, String, KeyValueStore<Bytes, byte[]>> materialized = Materialized.with(intSerde, stringSerde);
+    private final Properties props = StreamsTestUtils.topologyTestConfig(Serdes.String(), Serdes.String());
 
     private File stateDir = null;
-    @Rule
-    public final KStreamTestDriver driver = new KStreamTestDriver();
+//    @Rule
+    //public final KStreamTestDriver driver = new KStreamTestDriver();
 
-    @Before
-    public void setUp() {
-        stateDir = TestUtils.tempDirectory("kafka-test");
-    }
+//    @Before
+//    public void setUp() {
+//        stateDir = TestUtils.tempDirectory("kafka-test");
+//    }
 
     private void doTestJoin(final StreamsBuilder builder,
                             final String[] expectedKeys,
                             final MockProcessorSupplier<String, String> supplier,
                             final KTable<String, String> joined) {
 
-        final Collection<Set<String>> copartitionGroups = TopologyWrapper.getInternalTopologyBuilder(builder.build())
-                .setApplicationId("foobarSomeAppId")
-                .copartitionGroups();
 
+        //
+//        final Collection<Set<String>> copartitionGroups = TopologyWrapper.getInternalTopologyBuilder(builder.build())
+//                .setApplicationId("foobarSomeAppId")
+//                .copartitionGroups();
+//
+//
         //assertEquals(1, copartitionGroups.size()); //TODO What is this even testing?
         //assertEquals(new HashSet<>(Arrays.asList(topic1, topic2)), copartitionGroups.iterator().next());
-
-        final KTableValueGetterSupplier<String, String> getterSupplier = ((KTableImpl<String, String, String>) joined).valueGetterSupplier();
-
-        driver.setUp(builder, stateDir, Serdes.String(), Serdes.String());
-        driver.setTime(0L);
-
-        final MockProcessor<String, String> processor = supplier.theCapturedProcessor();
-
-        final KTableValueGetter<String, String> getter = getterSupplier.get();
-        getter.init(driver.context());
+//
+//        final KTableValueGetterSupplier<String, String> getterSupplier = ((KTableImpl<String, String, String>) joined).valueGetterSupplier();
 
 
-        for (StateStore o: driver.allStateStores().values()) {
-            System.out.println("The state store is = " + o.name() + ", type = " + o.toString());
+        //driver.setUp(builder, stateDir, Serdes.String(), Serdes.String());
+        //driver.setTime(0L);
+
+        //final MockProcessor<String, String> processor = supplier.theCapturedProcessor();
+//
+//        final KTableValueGetter<String, String> getter = getterSupplier.get();
+//        getter.init(driver.context());
+//
+//
+////        for (StateStore o: driver.allStateStores().values()) {
+////            System.out.println("The state store is = " + o.name() + ", type = " + o.toString());
+////        }
+//
+//        for (int i = 0; i < 2; i++) {
+//            driver.process(topic1, expectedKeys[i], expectedKeys[i] + ",X");
+//            System.out.println("Table1-row = (" + expectedKeys[i] + ", " + expectedKeys[i] + ",X)" );
+//        }
+//        // pass tuple with null key, it will be discarded in join process
+//        //driver.process(topic1, null, "SomeVal");
+//        driver.flushState();
+//
+//
+//        for (int i = 5; i < 8; i++) {
+//            driver.process(topic2, String.valueOf(i), "1,"+i+",YYYY");
+//            System.out.println("Table2-row = (" + String.valueOf(i) + ", 1,"+i+",YYYY)" );
+//        }
+//        // pass tuple with null key, it will be discarded in join process
+//        //driver.process(topic2, null, "AnotherVal");
+//        driver.flushState();
+
+
+
+
+
+
+        try (final TopologyTestDriver driver = new TopologyTestDriver(builder.build(), props, 0L)) {
+
+            final MockProcessor<String, String> processor = supplier.theCapturedProcessor();
+
+            for (int i = 0; i < 2; i++) {
+                driver.pipeInput(recordFactory.create(topic1, expectedKeys[i], expectedKeys[i] + ",X"));
+                System.out.println("Table1-row = (" + expectedKeys[i] + ", " + expectedKeys[i] + ",X)" );
+            }
+
+            for (int i = 5; i < 8; i++) {
+                driver.pipeInput(recordFactory.create(topic2, String.valueOf(i), "1,"+i+",YYYY"));
+                System.out.println("Table2-row = (" + String.valueOf(i) + ", 1,"+i+",YYYY)" );
+            }
+
+            processor.checkAndClearProcessResult("5:value1=1,X,value2=1,5,YYYY", "6:value1=1,X,value2=1,6,YYYY", "7:value1=1,X,value2=1,7,YYYY");
+
+//            checkJoinedValues(getter, kv("5", "value1=1,X,value2=1,5,YYYY"), kv("6", "value1=1,X,value2=1,6,YYYY"), kv("6","value1=1,X,value2=1,6,YYYY"));
         }
-
-        for (int i = 0; i < 2; i++) {
-            driver.process(topic1, expectedKeys[i], expectedKeys[i] + ",X");
-            System.out.println("Table1-row = (" + expectedKeys[i] + ", " + expectedKeys[i] + ",X)" );
-        }
-        // pass tuple with null key, it will be discarded in join process
-        //driver.process(topic1, null, "SomeVal");
-        driver.flushState();
-
-
-        for (int i = 5; i < 8; i++) {
-            driver.process(topic2, String.valueOf(i), "1,"+i+",YYYY");
-            System.out.println("Table2-row = (" + String.valueOf(i) + ", 1,"+i+",YYYY)" );
-        }
-        // pass tuple with null key, it will be discarded in join process
-        //driver.process(topic2, null, "AnotherVal");
-        driver.flushState();
-
-        processor.checkAndClearProcessResult("5:value1=1,X,value2=1,5,YYYY", "6:value1=1,X,value2=1,6,YYYY", "7:value1=1,X,value2=1,7,YYYY");
-
-        checkJoinedValues(getter, kv("5", "value1=1,X,value2=1,5,YYYY"), kv("6", "value1=1,X,value2=1,6,YYYY"), kv("6","value1=1,X,value2=1,6,YYYY"));
-
 
     }
 
@@ -210,7 +244,7 @@ public class KTableKTableOneToManyJoinTest {
         };
 
         joined = table1
-            .oneToManyJoin(table2, keyExtractor, joinPrefixFaker, leftKeyExtractor, rightKeyExtractor, joiner, Serdes.String(), Serdes.String(), Serdes.String(), Serdes.String());
+                .oneToManyJoin(table2, keyExtractor, joinPrefixFaker, leftKeyExtractor, rightKeyExtractor, joiner, Serdes.String(), Serdes.String(), Serdes.String(), Serdes.String());
 
         //Load the process supplier for the test.
         joined.toStream().process(supplier);

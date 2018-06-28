@@ -4,7 +4,6 @@ import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.kstream.internals.KTableProcessorSupplier;
-import org.apache.kafka.streams.kstream.internals.KTableRangeValueGetterSupplier;
 import org.apache.kafka.streams.kstream.internals.KTableValueGetter;
 import org.apache.kafka.streams.kstream.internals.KTableValueGetterSupplier;
 import org.apache.kafka.streams.processor.AbstractProcessor;
@@ -49,7 +48,7 @@ public class KTableJoinMergeProcessorSupplier<K0,V0,K,V,KO,VO> implements KTable
     public KTableValueGetterSupplier<K0, V0> view() {
         final KTableValueGetter<K, V> leftGetter =  leftValueGetter.get();
         final KTableValueGetter<K0, VO> rightRepartitionedGetter = rightValueGetter.get();
-        
+
         return new KTableValueGetterSupplier<K0, V0>() {
 
             @Override
@@ -95,7 +94,7 @@ public class KTableJoinMergeProcessorSupplier<K0,V0,K,V,KO,VO> implements KTable
 				System.arraycopy(leftNames, 0, result, 0, leftNames.length);
 				System.arraycopy(right, 0, result, leftNames.length, right.length);
 				return result; //no clue about semantics here? that way?
-				
+
 			}
         };
     }
