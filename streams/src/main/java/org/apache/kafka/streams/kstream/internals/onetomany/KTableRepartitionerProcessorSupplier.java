@@ -43,7 +43,7 @@ public class KTableRepartitionerProcessorSupplier<K, KR, VR> implements Processo
 
 					// this wont work as we cant get a grab on the number of
 					// partitions of the intermediate topic here
-					// therefore the extractor/mapper has to extract the final K here already
+					// therefore the extractor/leftKeyExtractor has to extract the final K here already
 					// so we can savely publish a delete and the update
 
 					// we could skip the delete when we know we are in the same partition

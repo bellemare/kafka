@@ -70,7 +70,8 @@ public class KTableJoinMergeProcessorSupplier<K0,V0,K,V,KO,VO> implements KTable
 
                     @Override
                     public V0 get(K0 key) {
-                        V leftvalue = leftGetter.get(leftKeyExtractor.apply(key));
+                        K d = leftKeyExtractor.apply(key);
+                        V leftvalue = leftGetter.get(d);
                         VO rightValue = rightRepartitionedGetter.get(key);
                         if (leftvalue != null && rightValue != null) { //INNER JOIN
                             return joiner.apply(leftvalue, rightValue);
