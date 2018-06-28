@@ -704,7 +704,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 myThat,
                 internalQueryableName); //TODO May not need this...
 
-
         final KTableKTableJoinNode.KTableKTableJoinNodeBuilder kTableJoinNodeBuilder = KTableKTableJoinNode.kTableKTableJoinNodeBuilder();
 
         // only materialize if specified in Materialized
@@ -740,14 +739,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 
         topology.addStateStore(new KeyValueStoreMaterializer<K0,VO>(new MaterializedInternal(materia)).materialize(), joinMergeName);
 
-        //TODO what do I even do with this.
-        //topology.connectProcessorAndStateStores(joinByRangeName, ((KTableImpl) other).valueGetterSupplier().storeNames());
-
-
         topology.connectProcessorAndStateStores(joinThisName, valueGetterSupplier().storeNames());
         topology.connectProcessorAndStateStores(joinMergeName, internalQueryableName);
         topology.connectProcessorAndStateStores(joinByRangeName, repartitionTopicName);
-
 
         return new KTableImpl<>(builder,
                 joinMergeName,
