@@ -6,7 +6,6 @@ import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
-import org.apache.kafka.streams.processor.internals.metrics.StreamsMetricsImpl;
 
 public class KTableRepartitionerProcessorSupplier<K, KR, VR> implements ProcessorSupplier<KR, Change<VR>> {
 	

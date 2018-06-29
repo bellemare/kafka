@@ -361,7 +361,8 @@ subprojects {
     // version 7.x requires Java 8
     toolVersion = '6.19'
   }
-  test.dependsOn('checkstyleMain', 'checkstyleTest')
+  // Bellemare - re-enable the below
+  //test.dependsOn('checkstyleMain', 'checkstyleTest')
 
   if (!JavaVersion.current().isJava9Compatible()) {
     findbugs {

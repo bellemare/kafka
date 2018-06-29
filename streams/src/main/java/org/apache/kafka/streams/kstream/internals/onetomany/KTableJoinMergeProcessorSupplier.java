@@ -78,11 +78,6 @@ public class KTableJoinMergeProcessorSupplier<K0,V0,K,V,KO,VO> implements KTable
                             return null;
                         }
                     }
-
-                    @Override
-                    public void close() {
-                        //Do nothing.
-                    }
                 };
             }
 

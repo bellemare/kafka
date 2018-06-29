@@ -255,6 +255,11 @@ class InnerMeteredKeyValueStore<K, IK, V, IV> extends WrappedStateStore.Abstract
     }
 
     @Override
+    public KeyValueIterator<K, V> prefixScan(K prefix) {
+        return new MeteredKeyValueIterator(this.inner.prefixScan(typeConverter.innerKey(prefix)), this.allTime);
+    }
+
+    @Override
     public void flush() {
         if (flushTime.shouldRecord()) {
             measureLatency(new Action<V>() {

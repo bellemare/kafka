@@ -86,6 +86,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 
     public static final String BY_RANGE = "KTABLE-JOIN-BYRANGE-";
 
+    private static final String REPARTITION_NAME = "KTABLE-REPARTITION-";
+
     private final ProcessorSupplier<?, ?> processorSupplier;
 
     private final KeyValueMapper<K, V, String> defaultKeyValueMapper;
@@ -882,7 +884,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         topology.addProcessor(repartitionProcessorName, repartitionProcessor,((AbstractStream<?>)other).name );
 
         //Partitions the data according to the prefix.
-        PartialKeyPartitioner<K0, VO, K> partitioner = new PartialKeyPartitioner<>(leftKeyExtractor, keySerde);
+        PartialKeyPartitioner<K0, VO, K> partitioner = new PartialKeyPartitioner<>(leftKeyExtractor, keySerde, repartitionTopicName); //TODO - Bellemare2 - is this the right topic?
 
         topology.addSink(repartitionSinkName, repartitionTopicName,
                 joinKeySerde.serializer(), valueOtherSerde.serializer(),
@@ -924,12 +926,14 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         KTableKTableRangeJoin<K0, V0, K, V, VO> joinByRange = new KTableKTableRangeJoin<K0, V0, K, V, VO>(joinThis.valueGetterSupplier(), joiner, joinPrefixFaker);
         topology.addProcessor(joinByRangeName, joinByRange, this.name);
 
-        String joinOutputName = builder.newStoreName(name + "-JOIN_OUTPUT");
-        String joinOutputTableSource = joinOutputName + "-TABLESOURCE";
 
-        KTableImpl<K0, V, V0> myThis = new KTableImpl<>(builder, joinThisName, joinThis, sourceNodes, this.queryableStoreName, false, null);
+        //String joinOutputName = builder.newStoreName(name + "-JOIN_OUTPUT");
+        //TODO - This is the name of the output processor.
+        //String joinOutputTableSource = joinOutputName + "-TABLESOURCE";
+
+        KTableImpl<K0, V, V0> myThis = new KTableImpl<>(builder, joinThisName, joinThis, sourceNodes, this.queryableStoreName, false);
         KTableImpl<K0, V, V0> myThat = new KTableImpl<>(builder, joinByRangeName, joinByRange, ((KTableImpl<K, ?, ?>) other).sourceNodes,
-                ((KTableImpl<K, ?, ?>) other).queryableStoreName, false, null);
+                ((KTableImpl<K, ?, ?>) other).queryableStoreName, false);
 
         String internalQueryableName = "internalQueryableName";
 
@@ -952,7 +956,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 .withKeySerde(joinKeySerde)
                 .withValueSerde(valueOtherSerde);
 
-        topology.addStateStore(new KeyValueStoreMaterializer<K0,VO>(new MaterializedInternal(materia, builder, "SOMEFOO")).materialize(), joinMergeName);
+        topology.addStateStore(new KeyValueStoreMaterializer<K0,VO>(new MaterializedInternal(materia, builder, "SOMEFOO2")).materialize(), joinMergeName);
 
         topology.connectProcessorAndStateStores(joinThisName, valueGetterSupplier().storeNames());
         topology.connectProcessorAndStateStores(joinMergeName, internalQueryableName);
@@ -965,5 +969,4 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 internalQueryableName,
                 internalQueryableName != null);
     }
-
 }

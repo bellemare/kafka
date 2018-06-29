@@ -149,6 +149,11 @@ public class MeteredKeyValueBytesStore<K, V> extends WrappedStateStore.AbstractS
     }
 
     @Override
+    public KeyValueIterator<K, V> prefixScan(K prefix) {
+        return innerMetered.prefixScan(prefix);
+    }
+
+    @Override
     public void flush() {
         innerMetered.flush();
     }

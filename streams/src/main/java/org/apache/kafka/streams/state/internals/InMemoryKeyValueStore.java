@@ -140,6 +140,11 @@ public class InMemoryKeyValueStore<K, V> implements KeyValueStore<K, V> {
     }
 
     @Override
+    public KeyValueIterator<K, V> prefixScan(K prefix) {
+        throw new UnsupportedOperationException(getClass().getSimpleName() + " can't perform a prefix scan");
+    }
+
+    @Override
     public long approximateNumEntries() {
         return this.map.size();
     }

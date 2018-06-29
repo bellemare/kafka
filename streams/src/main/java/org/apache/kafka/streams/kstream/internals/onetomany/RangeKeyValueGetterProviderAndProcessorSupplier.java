@@ -85,7 +85,7 @@ public class RangeKeyValueGetterProviderAndProcessorSupplier<K0, V0, K, V, VO> i
         };
     }
 
-    
+
     public KTableRangeValueGetterSupplier<K0, VO> valueGetterSupplier() {
     	return new KTableSourceValueGetterSupplier<K0, VO>(topicName);
     }
