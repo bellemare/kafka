@@ -856,7 +856,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                                                          ValueMapper<K, K0> joinPrefixFaker,
                                                          ValueMapper<K0, K> leftKeyExtractor,
                                                          ValueMapper<K0, K> rightKeyExtractor,
-                                                         ValueJoiner<V, VO, V0> joiner,
+                                                         final ValueJoiner<V, VO, V0> joiner,
+                                                         final Materialized<K0, V0, KeyValueStore<Bytes, byte[]>> materialized,
                                                          Serde<KO> keyOtherSerde,
                                                          Serde<VO> valueOtherSerde,
                                                          Serde<K0> joinKeySerde,
@@ -935,38 +936,41 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         KTableImpl<K0, V, V0> myThat = new KTableImpl<>(builder, joinByRangeName, joinByRange, ((KTableImpl<K, ?, ?>) other).sourceNodes,
                 ((KTableImpl<K, ?, ?>) other).queryableStoreName, false);
 
-        String internalQueryableName = "internalQueryableName";
+
+        MaterializedInternal<K0, V0, KeyValueStore<Bytes, byte[]>> innerMaterialized =
+                new MaterializedInternal<>(materialized, builder, "SOMEFOO2");
+
 
         final String joinMergeName = builder.newProcessorName(MERGE_NAME);
 
         final KTableKTableJoinMerger<K0, V0> joinMerge = new KTableKTableJoinMerger<K0, V0>(
                 myThis,
                 myThat,
-                internalQueryableName); //TODO May not need this...
+                innerMaterialized.storeName()); //TODO May not need this...
 
 
         topology.addProcessor(joinMergeName, joinMerge, joinThisName, joinByRangeName);
 
         final Set<String> allSourceNodes = ensureJoinableWith((AbstractStream<K>)other); //TODO Unsafe probably... sigh.
-
-        //Make a materialized store for testing purposes I guess
-        Materialized materia = Materialized.<K0,VO>as(new RocksDbKeyValueBytesStoreSupplier(internalQueryableName))
-                .withCachingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
-                .withLoggingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
-                .withKeySerde(joinKeySerde)
-                .withValueSerde(valueOtherSerde);
-
-        topology.addStateStore(new KeyValueStoreMaterializer<K0,VO>(new MaterializedInternal(materia, builder, "SOMEFOO2")).materialize(), joinMergeName);
+//
+//        //Make a materialized store for testing purposes I guess
+//        Materialized materia = Materialized.<K0,VO>as(new RocksDbKeyValueBytesStoreSupplier(internalQueryableName))
+//                .withCachingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
+//                .withLoggingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
+//                .withKeySerde(joinKeySerde)
+//                .withValueSerde(valueOtherSerde);
+//
+        topology.addStateStore(new KeyValueStoreMaterializer<K0,V0>(innerMaterialized).materialize(), joinMergeName);
 
         topology.connectProcessorAndStateStores(joinThisName, valueGetterSupplier().storeNames());
-        topology.connectProcessorAndStateStores(joinMergeName, internalQueryableName);
+        topology.connectProcessorAndStateStores(joinMergeName, innerMaterialized.storeName());
         topology.connectProcessorAndStateStores(joinByRangeName, repartitionTopicName);
 
         return new KTableImpl<>(builder,
                 joinMergeName,
                 joinMerge,
                 allSourceNodes,
-                internalQueryableName,
-                internalQueryableName != null);
+                innerMaterialized.storeName(),
+                innerMaterialized.storeName() != null);
     }
 }
