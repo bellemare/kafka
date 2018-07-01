@@ -18,25 +18,32 @@ public class KTableKTableRangeJoin<K, V, KL, VL, VR> implements ProcessorSupplie
 	private ValueJoiner<VL, VR, V> joiner;
 	private KTableRangeValueGetterSupplier<K, VR> right;
 	private ValueMapper<KL, K> faker;
+	private ValueMapper<K, KL> rightKeyExtractor;
 	
-    public KTableKTableRangeJoin(KTableRangeValueGetterSupplier<K, VR> right, ValueJoiner<VL, VR, V> joiner, ValueMapper<KL, K> faker) {
+    public KTableKTableRangeJoin(KTableRangeValueGetterSupplier<K, VR> right,
+                                 ValueJoiner<VL, VR, V> joiner,
+                                 ValueMapper<KL, K> faker,
+                                 ValueMapper<K, KL> rightKeyExtractor) {
     	this.right = right;
         this.joiner = joiner;
         this.faker = faker;
+        this.rightKeyExtractor = rightKeyExtractor;
     }
 
 	@Override
     public Processor<KL, Change<VL>> get() {
-        return new KTableKTableJoinProcessor(right);
+        return new KTableKTableJoinProcessor(right, rightKeyExtractor);
     }
 	
 
     private class KTableKTableJoinProcessor extends AbstractProcessor<KL, Change<VL>> {
 
 		private KTableRangeValueGetter<K, VR> rightValueGetter;
+        private ValueMapper<K, KL> fff;
 
-        public KTableKTableJoinProcessor(KTableRangeValueGetterSupplier<K, VR> right) {
+        public KTableKTableJoinProcessor(KTableRangeValueGetterSupplier<K, VR> right, ValueMapper<K, KL> rightKeyExtractor ) {
             this.rightValueGetter = right.get();
+            this.fff = rightKeyExtractor;
         }
 
         @SuppressWarnings("unchecked")
@@ -56,12 +63,13 @@ public class KTableKTableRangeJoin<K, V, KL, VL, VR> implements ProcessorSupplie
                 throw new StreamsException("Record key for KTable join operator should not be null.");
 
             K prefixKey = faker.apply(key);
-            
+
            final KeyValueIterator<K,VR> rightValues = rightValueGetter.prefixScan(prefixKey);
             
             while(rightValues.hasNext()){
                   KeyValue<K, VR> rightKeyValue = rightValues.next();
-                  K realKey = rightKeyValue.key;
+
+                  KL realKey = fff.apply(rightKeyValue.key);
                   VR value2 = rightKeyValue.value;
                   V newValue = null;
   				  V oldValue = null;
