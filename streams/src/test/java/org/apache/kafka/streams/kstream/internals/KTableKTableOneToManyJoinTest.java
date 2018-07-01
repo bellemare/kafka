@@ -90,7 +90,7 @@ public class KTableKTableOneToManyJoinTest {
             System.out.println("The state store is = " + o.name() + ", type = " + o.toString());
         }
 
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 3; i++) {
             driver.process(topic1, expectedKeys[i], expectedKeys[i] + ",X");
             System.out.println("Table1-row = (" + expectedKeys[i] + ", " + expectedKeys[i] + ",X)" );
         }
@@ -118,6 +118,17 @@ public class KTableKTableOneToManyJoinTest {
         supplier.checkAndClearProcessResult("5:value1=1,XYZ,value2=1,5,YYYY", "6:value1=1,XYZ,value2=1,6,YYYY", "7:value1=1,XYZ,value2=1,7,YYYY");
         checkJoinedValues(getter, kv("5", "value1=1,XYZ,value2=1,5,YYYY"), kv("6", "value1=1,XYZ,value2=1,6,YYYY"), kv("7","value1=1,XYZ,value2=1,7,YYYY"));
 
+
+
+        for (int i = 2; i < 4; i++) {
+            driver.process(topic2, String.valueOf(i), "2,"+i+",YYYY");
+            System.out.println("Table2-row = (" + String.valueOf(i) + ", 2,"+i+",YYYY)" );
+        }
+        // pass tuple with null key, it will be discarded in join process
+        //driver.process(topic2, null, "AnotherVal");
+        driver.flushState();
+
+        supplier.checkAndClearProcessResult("2:value1=2,X,value2=2,2,YYYY", "3:value1=2,X,value2=2,3,YYYY");
 
 
     }
