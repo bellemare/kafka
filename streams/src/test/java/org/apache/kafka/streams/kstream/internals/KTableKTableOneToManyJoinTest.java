@@ -96,6 +96,10 @@ public class KTableKTableOneToManyJoinTest {
 
             processor.checkAndClearProcessResult("5:value1=1,X,value2=1,5,YYYY", "6:value1=1,X,value2=1,6,YYYY", "7:value1=1,X,value2=1,7,YYYY");
 
+            driver.pipeInput(recordFactory.create(topic1, "1", "1,XYZ"));
+
+            processor.checkAndClearProcessResult("5:value1=1,XYZ,value2=1,5,YYYY", "6:value1=1,XYZ,value2=1,6,YYYY", "7:value1=1,XYZ,value2=1,7,YYYY");
+
         }
 
     }

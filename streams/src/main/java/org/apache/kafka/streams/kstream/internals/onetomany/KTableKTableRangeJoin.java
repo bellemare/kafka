@@ -15,28 +15,35 @@ import org.apache.kafka.streams.state.KeyValueIterator;
 
 public class KTableKTableRangeJoin<K, V, KL, VL, VR> implements ProcessorSupplier<KL, Change<VL>> {
 
-	private ValueJoiner<VL, VR, V> joiner;
-	private KTableRangeValueGetterSupplier<K, VR> right;
-	private ValueMapper<KL, K> faker;
-	
-    public KTableKTableRangeJoin(KTableRangeValueGetterSupplier<K, VR> right, ValueJoiner<VL, VR, V> joiner, ValueMapper<KL, K> faker) {
-    	this.right = right;
+    private ValueJoiner<VL, VR, V> joiner;
+    private KTableRangeValueGetterSupplier<K, VR> right;
+    private ValueMapper<KL, K> faker;
+    private ValueMapper<K, KL> rightKeyExtractor;
+
+    public KTableKTableRangeJoin(KTableRangeValueGetterSupplier<K, VR> right,
+                                 ValueJoiner<VL, VR, V> joiner,
+                                 ValueMapper<KL, K> faker,
+                                 ValueMapper<K, KL> rightKeyExtractor) {
+        this.right = right;
         this.joiner = joiner;
         this.faker = faker;
+        this.rightKeyExtractor = rightKeyExtractor;
     }
 
-	@Override
+    @Override
     public Processor<KL, Change<VL>> get() {
-        return new KTableKTableJoinProcessor(right);
+        return new KTableKTableJoinProcessor(right, rightKeyExtractor);
     }
-	
+
 
     private class KTableKTableJoinProcessor extends AbstractProcessor<KL, Change<VL>> {
 
-		private KTableRangeValueGetter<K, VR> rightValueGetter;
+        private KTableRangeValueGetter<K, VR> rightValueGetter;
+        private ValueMapper<K, KL> fff;
 
-        public KTableKTableJoinProcessor(KTableRangeValueGetterSupplier<K, VR> right) {
+        public KTableKTableJoinProcessor(KTableRangeValueGetterSupplier<K, VR> right, ValueMapper<K, KL> rightKeyExtractor ) {
             this.rightValueGetter = right.get();
+            this.fff = rightKeyExtractor;
         }
 
         @SuppressWarnings("unchecked")
@@ -56,27 +63,28 @@ public class KTableKTableRangeJoin<K, V, KL, VL, VR> implements ProcessorSupplie
                 throw new StreamsException("Record key for KTable join operator should not be null.");
 
             K prefixKey = faker.apply(key);
-            
-           final KeyValueIterator<K,VR> rightValues = rightValueGetter.prefixScan(prefixKey);
-            
+
+            final KeyValueIterator<K,VR> rightValues = rightValueGetter.prefixScan(prefixKey);
+
             while(rightValues.hasNext()){
-                  KeyValue<K, VR> rightKeyValue = rightValues.next();
-                  K realKey = rightKeyValue.key;
-                  VR value2 = rightKeyValue.value;
-                  V newValue = null;
-  				  V oldValue = null;
-                  
-                  
-                  if (leftChange.oldValue != null) {
-                	  oldValue = joiner.apply(leftChange.oldValue, value2);
-                  }
-                  
-                  if (leftChange.newValue != null){
-                      newValue = joiner.apply(leftChange.newValue, value2);
-                  }
-            	 
-				 context().forward(realKey, new Change<>(newValue, oldValue));
-                  
+                KeyValue<K, VR> rightKeyValue = rightValues.next();
+
+                KL realKey = fff.apply(rightKeyValue.key);
+                VR value2 = rightKeyValue.value;
+                V newValue = null;
+                V oldValue = null;
+
+
+                if (leftChange.oldValue != null) {
+                    oldValue = joiner.apply(leftChange.oldValue, value2);
+                }
+
+                if (leftChange.newValue != null){
+                    newValue = joiner.apply(leftChange.newValue, value2);
+                }
+
+                context().forward(realKey, new Change<>(newValue, oldValue));
+
             }
         }
     }
