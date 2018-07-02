@@ -17,6 +17,7 @@
 package org.apache.kafka.streams.kstream.internals;
 
 import org.apache.kafka.common.serialization.Serde;
+import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.Consumed;
 import org.apache.kafka.streams.KeyValue;
@@ -846,22 +847,91 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         return sendOldValues;
     }
 
+    @Override
+    public<K0, V0, KO, VO> KTable<K0, V0> oneToManyJoin(KTable<KO, VO> other,
+                                                          ValueMapper<VO, K> keyExtractor,
+                                                          ValueMapper<K, K0> joinPrefixFaker,
+                                                          ValueMapper<K0, K> leftKeyExtractor,
+                                                          ValueMapper<K0, K> rightKeyExtractor,
+                                                          final ValueJoiner<V, VO, V0> joiner,
+                                                          final Materialized<K0, V0, KeyValueStore<Bytes, byte[]>> materialized,
+                                                          Serde<VO> valueOtherSerde,
+                                                          Serde<K0> joinKeySerde,
+                                                          Serde<V0> joinValueSerde) {
+
+        return doOneToManyJoin(other, keyExtractor, joinPrefixFaker, leftKeyExtractor, rightKeyExtractor, joiner,
+                new MaterializedInternal<>(materialized, builder, MERGE_NAME), valueOtherSerde, joinKeySerde,joinValueSerde);
+    }
+//
+//    @Override
+//    public<K0, V0, KO, VO> KTable<K0, V0> oneToManyJoin(KTable<KO, VO> other,
+//                                                        ValueMapper<VO, K> keyExtractor,
+//                                                        ValueMapper<K, K0> joinPrefixFaker,
+//                                                        ValueMapper<K0, K> leftKeyExtractor,
+//                                                        ValueMapper<K0, K> rightKeyExtractor,
+//                                                        final ValueJoiner<V, VO, V0> joiner,
+//                                                        Serde<VO> valueOtherSerde,
+//                                                        Serde<K0> joinKeySerde) {
+//
+//        throw new UnsupportedOperationException("Null materialized view is not supported at the moment.");
+//        //TODO - Bellemare - need to convert the two ProcessorSupplier to KTableProcessorSuppliers.
+////        return doOneToManyJoin(other, keyExtractor, joinPrefixFaker, leftKeyExtractor, rightKeyExtractor, joiner,
+////                null, valueOtherSerde, joinKeySerde);
+//    }
+
+
+    @SuppressWarnings("unchecked")
+    private <K0, V0, KO, VO> KTable<K0, V0> doOneToManyJoin(KTable<KO, VO> other,
+                                                       ValueMapper<VO, K> keyExtractor,
+                                                       ValueMapper<K, K0> joinPrefixFaker,
+                                                       ValueMapper<K0, K> leftKeyExtractor,
+                                                       ValueMapper<K0, K> rightKeyExtractor,
+                                                       final ValueJoiner<V, VO, V0> joiner,
+                                                       final MaterializedInternal<K0, V0, KeyValueStore<Bytes, byte[]>> materialized,
+                                                       Serde<VO> valueOtherSerde,
+                                                       Serde<K0> joinKeySerde,
+                                                       Serde<V0> joinValueSerde) {
+        Objects.requireNonNull(other, "other can't be null");
+        Objects.requireNonNull(joiner, "joiner can't be null");
+        final String internalQueryableName = materialized == null ? null : materialized.storeName();
+        final String joinMergeName = builder.newProcessorName(MERGE_NAME);
+        final KTable<K0, V0> result = buildOneToManyJoin(other,
+                keyExtractor,
+                joinPrefixFaker,
+                leftKeyExtractor,
+                rightKeyExtractor,
+                joiner,
+                joinMergeName,
+                internalQueryableName,
+                //materialized,
+                valueOtherSerde,
+                joinKeySerde,
+                joinValueSerde);
+
+        if (materialized != null) {
+            final StoreBuilder<KeyValueStore<K0, V0>> storeBuilder
+                    = new KeyValueStoreMaterializer<>(materialized).materialize();
+            builder.internalTopologyBuilder.addStateStore(storeBuilder, joinMergeName);
+        }
+        return result;
+    }
+
 
 
     //Currently, the left side of the join contains the one.
     //The right side contains the many.
-    @Override
-    public <K0, V0, KO, VO> KTable<K0, V0> oneToManyJoin(KTable<KO, VO> other,
-                                                         ValueMapper<VO, K> keyExtractor,
-                                                         ValueMapper<K, K0> joinPrefixFaker,
-                                                         ValueMapper<K0, K> leftKeyExtractor,
-                                                         ValueMapper<K0, K> rightKeyExtractor,
-                                                         final ValueJoiner<V, VO, V0> joiner,
-                                                         final Materialized<K0, V0, KeyValueStore<Bytes, byte[]>> materialized,
-                                                         Serde<KO> keyOtherSerde,
-                                                         Serde<VO> valueOtherSerde,
-                                                         Serde<K0> joinKeySerde,
-                                                         Serde<V0> joinValueSerde) {
+    private <K0, V0, KO, VO> KTable<K0, V0> buildOneToManyJoin(KTable<KO, VO> other,
+                                                             ValueMapper<VO, K> keyExtractor,
+                                                             ValueMapper<K, K0> joinPrefixFaker,
+                                                             ValueMapper<K0, K> leftKeyExtractor,
+                                                             ValueMapper<K0, K> rightKeyExtractor,
+                                                             final ValueJoiner<V, VO, V0> joiner,
+                                                            final String joinMergeName,
+                                                            final String internalQueryableName,
+//                                                            final MaterializedInternal<K0, V0, KeyValueStore<Bytes, byte[]>> materialized,
+                                                             Serde<VO> valueOtherSerde,
+                                                               Serde<K0> joinKeySerde,
+                                                               Serde<V0> joinValueSerde) {
 
         ((KTableImpl<?,?,?>) other).enableSendingOldValues();
         enableSendingOldValues();
@@ -903,10 +973,11 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 
         //Pretty sure this does two things:
         // 1) Loads the data into a stateStore for the following rangescan.
-        // 2) Drives the join logic from the right. Uses the leftKeyExtractor to get partial key, then uses the partial key to get the left value from this store.
+        // 2) Drives the join logic from the right. Uses the leftKeyExtractor to get partial key,
+        //    then uses the partial key to get the left value from this store.
         //    Applies the join logic.
         //    Returns the data keyed on the RightKey, which is the original key.
-        //TODO - Do I need to repartition the rekeyed data now?
+        //TODO - Do I need to repartition the rekeyed data now? A: YES
         final RangeKeyValueGetterProviderAndProcessorSupplier<K0, V0, K, V, VO> joinThis =
                 new RangeKeyValueGetterProviderAndProcessorSupplier(repartitionTopicName, ((KTableImpl<?, ?, ?>) this).valueGetterSupplier(), leftKeyExtractor, rightKeyExtractor, joiner);
         topology.addProcessor(joinThisName, joinThis, repartitionSourceName);
@@ -928,49 +999,89 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         topology.addProcessor(joinByRangeName, joinByRange, this.name);
 
 
-        //String joinOutputName = builder.newStoreName(name + "-JOIN_OUTPUT");
-        //TODO - This is the name of the output processor.
-        //String joinOutputTableSource = joinOutputName + "-TABLESOURCE";
+        //TODO - Sink each joiner result first by repartitioning.
+//
+//
+//        String outputRepartitionerName = builder.newProcessorName(REPARTITION_NAME);
+//        topology.addInternalTopic(outputRepartitionerName);
+//        final String outputRepartitionSinkName = outputRepartitionerName + "-this-sink";
+//
+//        //1) Sink it
+//        topology.addSink(outputRepartitionSinkName, outputRepartitionSinkName, joinKeySerde.serializer(), joinValueSerde.serializer(), null, joinThisName);
+//
+//        KTable<K0, V0> ktableThis = builder.table(outputRepartitionSinkName,
+//                new ConsumedInternal<>(joinKeySerde, joinValueSerde, new FailOnInvalidTimestamp(), null),
+//                new MaterializedInternal<>(Materialized.<K0, V0, KeyValueStore<Bytes, byte[]>>with(joinKeySerde, joinValueSerde),
+//                        builder,
+//                        KTableImpl.TOSTREAM_NAME));
+//
+//        String thatOutputRepartitionerName = builder.newProcessorName(REPARTITION_NAME);
+//        topology.addInternalTopic(thatOutputRepartitionerName);
+//        final String thatOutputRepartitionSinkName = thatOutputRepartitionerName + "-that-sink";
+//
+//        topology.addSink(thatOutputRepartitionerName, thatOutputRepartitionerName, joinKeySerde.serializer(), joinValueSerde.serializer(), null, joinByRangeName);
+//
+//        KTable<K0, V0> ktableThat = builder.table(thatOutputRepartitionSinkName,
+//                new ConsumedInternal<>(joinKeySerde, joinValueSerde, new FailOnInvalidTimestamp(), null),
+//                new MaterializedInternal<>(Materialized.<K0, V0, KeyValueStore<Bytes, byte[]>>with(joinKeySerde, joinValueSerde),
+//                        builder,
+//                        KTableImpl.TOSTREAM_NAME));
+//
+//
+//
 
         KTableImpl<K0, V, V0> myThis = new KTableImpl<>(builder, joinThisName, joinThis, sourceNodes, this.queryableStoreName, false);
         KTableImpl<K0, V, V0> myThat = new KTableImpl<>(builder, joinByRangeName, joinByRange, ((KTableImpl<K, ?, ?>) other).sourceNodes,
                 ((KTableImpl<K, ?, ?>) other).queryableStoreName, false);
 
 
-        MaterializedInternal<K0, V0, KeyValueStore<Bytes, byte[]>> innerMaterialized =
-                new MaterializedInternal<>(materialized, builder, "SOMEFOO2");
+        Materialized myMat = Materialized.<K0, V0, KeyValueStore<Bytes, byte[]>>as("anotherUselessStoreName")
+                .withCachingDisabled()
+                .withLoggingDisabled()
+                .withKeySerde(joinKeySerde)
+                .withValueSerde(joinValueSerde);
 
+        MaterializedInternal<K0, VO, KeyValueStore<Bytes, byte[]>> myUselessMaterializedStore = new MaterializedInternal(myMat, builder, "myUselessMaterializedStore");
 
-        final String joinMergeName = builder.newProcessorName(MERGE_NAME);
-
+        //TODO - Figure out how to avoid materializing this...
         final KTableKTableJoinMerger<K0, V0> joinMerge = new KTableKTableJoinMerger<K0, V0>(
                 myThis,
                 myThat,
-                innerMaterialized.storeName()); //TODO May not need this...
+                internalQueryableName);
+//                myUselessMaterializedStore.storeName());
 
-
-        topology.addProcessor(joinMergeName, joinMerge, joinThisName, joinByRangeName);
+        //topology.addStateStore(new KeyValueStoreMaterializer<>(myUselessMaterializedStore).materialize(), joinThisName);
 
         final Set<String> allSourceNodes = ensureJoinableWith((AbstractStream<K>)other); //TODO Unsafe probably... sigh.
-//
-//        //Make a materialized store for testing purposes I guess
-//        Materialized materia = Materialized.<K0,VO>as(new RocksDbKeyValueBytesStoreSupplier(internalQueryableName))
-//                .withCachingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
-//                .withLoggingDisabled() //TODO - Bellemare - Doesn't support prefix scanning...
-//                .withKeySerde(joinKeySerde)
-//                .withValueSerde(valueOtherSerde);
-//
-        topology.addStateStore(new KeyValueStoreMaterializer<K0,V0>(innerMaterialized).materialize(), joinMergeName);
 
+        topology.addProcessor(joinMergeName, joinMerge, joinThisName, joinByRangeName);
         topology.connectProcessorAndStateStores(joinThisName, valueGetterSupplier().storeNames());
-        topology.connectProcessorAndStateStores(joinMergeName, innerMaterialized.storeName());
         topology.connectProcessorAndStateStores(joinByRangeName, repartitionTopicName);
+
+//
+//        //TODO : Repartition
+//        //0) Create names
+//        String outputRepartitionerName = builder.newProcessorName(REPARTITION_NAME);
+//        topology.addInternalTopic(outputRepartitionerName);
+//        final String outputRepartitionSinkName = outputRepartitionerName + "-sink";
+//
+//        //1) Sink it
+//        topology.addSink(outputRepartitionerName, outputRepartitionerName, joinKeySerde.serializer(), joinValueSerde.serializer(), null, joinMergeName);
+//
+//        //2) Create a KTable to read it back.
+//        return builder.table(outputRepartitionSinkName,
+//                new ConsumedInternal<>(joinKeySerde, joinValueSerde, new FailOnInvalidTimestamp(), null),
+//                materialized);
+
+//                new MaterializedInternal<>(Materialized.<K0, V0, KeyValueStore<Bytes, byte[]>>with(joinKeySerde, joinValueSerde),
+//                        builder,
+//                        KTableImpl.TOSTREAM_NAME));
 
         return new KTableImpl<>(builder,
                 joinMergeName,
                 joinMerge,
                 allSourceNodes,
-                innerMaterialized.storeName(),
-                innerMaterialized.storeName() != null);
+                internalQueryableName,
+                internalQueryableName != null);
     }
 }

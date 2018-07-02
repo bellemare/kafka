@@ -118,8 +118,6 @@ public class KTableKTableOneToManyJoinTest {
         supplier.checkAndClearProcessResult("5:value1=1,XYZ,value2=1,5,YYYY", "6:value1=1,XYZ,value2=1,6,YYYY", "7:value1=1,XYZ,value2=1,7,YYYY");
         checkJoinedValues(getter, kv("5", "value1=1,XYZ,value2=1,5,YYYY"), kv("6", "value1=1,XYZ,value2=1,6,YYYY"), kv("7","value1=1,XYZ,value2=1,7,YYYY"));
 
-
-
         for (int i = 2; i < 4; i++) {
             driver.process(topic2, String.valueOf(i), "2,"+i+",YYYY");
             System.out.println("Table2-row = (" + String.valueOf(i) + ", 2,"+i+",YYYY)" );
@@ -129,8 +127,6 @@ public class KTableKTableOneToManyJoinTest {
         driver.flushState();
 
         supplier.checkAndClearProcessResult("2:value1=2,X,value2=2,2,YYYY", "3:value1=2,X,value2=2,3,YYYY");
-
-
     }
 
     @Test
@@ -226,7 +222,11 @@ public class KTableKTableOneToManyJoinTest {
                 .withValueSerde(Serdes.String());
 
         joined = table1
-                .oneToManyJoin(table2, keyExtractor, joinPrefixFaker, leftKeyExtractor, rightKeyExtractor, joiner, mat, Serdes.String(), Serdes.String(), Serdes.String(), Serdes.String());
+                .oneToManyJoin(table2, keyExtractor, joinPrefixFaker, leftKeyExtractor, rightKeyExtractor, joiner, mat, Serdes.String(), Serdes.String(),  Serdes.String());
+
+//        joined = table1
+//                .oneToManyJoin(table2, keyExtractor, joinPrefixFaker, leftKeyExtractor, rightKeyExtractor, joiner, Serdes.String(), Serdes.String());
+
 
         //Load the process supplier for the test.
         joined.toStream().process(supplier);
