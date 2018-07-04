@@ -83,6 +83,7 @@ public class KTableKTableOneToManyJoinTest {
         driver.setTime(0L);
 
         final KTableValueGetter<String, String> getter = getterSupplier.get();
+
         getter.init(driver.context());
 
 
@@ -106,6 +107,26 @@ public class KTableKTableOneToManyJoinTest {
         // pass tuple with null key, it will be discarded in join process
         //driver.process(topic2, null, "AnotherVal");
         driver.flushState();
+
+
+        KTable<String,String> tempFoo = builder.table("myThisRepartitionSink-Topic",
+                Consumed.<String, String>with(Serdes.String(), Serdes.String()),
+                Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as("myTempTable"));
+
+        final KTableValueGetter<String, String> tempGetter = ((KTableImpl<String, String, String>) tempFoo).valueGetterSupplier().get();
+
+        tempGetter.init(driver.context());
+
+        System.out.println("get(0) = " + tempGetter.get("0"));
+        System.out.println("get(1) = " + tempGetter.get("1"));
+
+        System.out.println("get(5) = " + tempGetter.get("5"));
+        System.out.println("get(6) = " + tempGetter.get("6"));
+
+
+
+
+
 
         supplier.checkAndClearProcessResult("5:value1=1,X,value2=1,5,YYYY", "6:value1=1,X,value2=1,6,YYYY", "7:value1=1,X,value2=1,7,YYYY");
 
