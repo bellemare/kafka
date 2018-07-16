@@ -980,14 +980,15 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         KTableImpl<KR, V, V0> myThat = new KTableImpl<>(builder, joinByRangeName, joinByRange, ((KTableImpl<K, ?, ?>) other).sourceNodes,
                 ((KTableImpl<K, ?, ?>) other).queryableStoreName, false);
 
-        Materialized myMat = Materialized.<KR, V0, KeyValueStore<Bytes, byte[]>>with(otherKeySerde, joinedValueSerde);
-        MaterializedInternal<KR, V0, KeyValueStore<Bytes, byte[]>> myUselessMaterializedStore = new MaterializedInternal(myMat, builder, "SOME_HANDLE_NAME");
+//        Materialized myMat = Materialized.<KR, V0, KeyValueStore<Bytes, byte[]>>with(otherKeySerde, joinedValueSerde);
+//        MaterializedInternal<KR, V0, KeyValueStore<Bytes, byte[]>> myUselessMaterializedStore = new MaterializedInternal(myMat, builder, "SOME_HANDLE_NAME");
 
         //TODO - Figure out how to avoid materializing this...
         final KTableKTableJoinMerger<KR, V0> joinMerge = new KTableKTableJoinMerger<>(
                 myThis,
                 myThat,
-                myUselessMaterializedStore.storeName());
+                null);
+                //myUselessMaterializedStore.storeName());
 
         //Add the join processor to the topology.
         topology.addProcessor(joinMergeName, joinMerge, joinOnThisTableName, joinByRangeName);
@@ -1004,20 +1005,20 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         sourcesNeedCopartitioning.addAll(sourceNodes);
         topology.copartitionSources(sourcesNeedCopartitioning);
 
-        final StoreBuilder<KeyValueStore<KR, V0>> storeBuilder
-                = new KeyValueStoreMaterializer<>(myUselessMaterializedStore).materialize();
-        builder.internalTopologyBuilder.addStateStore(storeBuilder, joinMergeName);
+//        final StoreBuilder<KeyValueStore<KR, V0>> storeBuilder
+//                = new KeyValueStoreMaterializer<>(myUselessMaterializedStore).materialize();
+//        builder.internalTopologyBuilder.addStateStore(storeBuilder, joinMergeName);
 
         String asdfTableName = builder.newProcessorName(SOURCE_NAME);
         KTable asdf = new KTableImpl<>(builder,
                 asdfTableName,
                 joinMerge,
                 sourcesNeedCopartitioning,
-                myUselessMaterializedStore.storeName(),
-                myUselessMaterializedStore.storeName() != null);
+                null,
+                false);
 
         topology.addProcessor(asdfTableName, joinMerge, joinMergeName);
-        topology.connectProcessorAndStateStores(asdfTableName, myUselessMaterializedStore.storeName());
+        //topology.connectProcessorAndStateStores(asdfTableName, myUselessMaterializedStore.storeName());
 
         String outputRepartitionSinkName = builder.newProcessorName(REPARTITION_NAME);
         String outputRepartitionSinkTopicName = outputRepartitionSinkName + "-Topic";
