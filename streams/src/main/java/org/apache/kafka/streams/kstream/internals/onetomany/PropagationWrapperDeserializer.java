@@ -7,11 +7,11 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Map;
 
-class PrintableWrapperDeserializer<V> implements Deserializer<PrintableWrapper<V>> {
+class PropagationWrapperDeserializer<V> implements Deserializer<PropagationWrapper<V>> {
 
     private final Deserializer<V> deserializer;
 
-    public PrintableWrapperDeserializer(Deserializer<V> deserializer) {
+    public PropagationWrapperDeserializer(Deserializer<V> deserializer) {
         this.deserializer = deserializer;
     }
 
@@ -21,7 +21,7 @@ class PrintableWrapperDeserializer<V> implements Deserializer<PrintableWrapper<V
     }
 
     @Override
-    public PrintableWrapper<V> deserialize(String topic, byte[] data) {
+    public PropagationWrapper<V> deserialize(String topic, byte[] data) {
         //{byte boolean, stored in bit 0}{4-byte value length}{value}
 
         byte[] printableLengthRaw = Arrays.copyOfRange(data, 0, 1);
@@ -36,7 +36,7 @@ class PrintableWrapperDeserializer<V> implements Deserializer<PrintableWrapper<V
             value = deserializer.deserialize(topic, rawVal);
         }
 
-        return new PrintableWrapper<>(value, printable);
+        return new PropagationWrapper<>(value, printable);
     }
 
     @Override

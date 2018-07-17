@@ -35,7 +35,10 @@ public class KTableKTableRangeJoin<KL, KR, VL, VR, V> implements ProcessorSuppli
     public Processor<KL, Change<VL>> get() {
         return new KTableKTableJoinProcessor(right);
     }
-	
+
+    public void enableSendingOldValues() {
+
+    }
 
     private class KTableKTableJoinProcessor extends AbstractProcessor<KL, Change<VL>> {
 

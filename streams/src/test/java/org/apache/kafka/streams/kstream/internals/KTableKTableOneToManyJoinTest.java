@@ -29,9 +29,8 @@ import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.kstream.internals.onetomany.CombinedKey;
 import org.apache.kafka.streams.kstream.internals.onetomany.CombinedKeySerde;
-import org.apache.kafka.streams.kstream.internals.onetomany.PrintableWrapper;
-import org.apache.kafka.streams.kstream.internals.onetomany.PrintableWrapperSerde;
-import org.apache.kafka.streams.processor.StateStore;
+import org.apache.kafka.streams.kstream.internals.onetomany.PropagationWrapper;
+import org.apache.kafka.streams.kstream.internals.onetomany.PropagationWrapperSerde;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.test.KStreamTestDriver;
 import org.apache.kafka.test.MockProcessorSupplier;
@@ -42,7 +41,6 @@ import org.junit.Test;
 
 import java.io.File;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -126,20 +124,20 @@ public class KTableKTableOneToManyJoinTest {
                         .withValueSerde(Serdes.String());
 
 
-        PrintableWrapperSerde<String> pwSerde = new PrintableWrapperSerde(Serdes.String());
-        PrintableWrapper<String> fooWrap = new PrintableWrapper<>("my string", true);
+        PropagationWrapperSerde<String> pwSerde = new PropagationWrapperSerde(Serdes.String());
+        PropagationWrapper<String> fooWrap = new PropagationWrapper<>("my string", true);
 
         byte[] result = pwSerde.serializer().serialize("someTopic", fooWrap);
-        PrintableWrapper<String> unwrappedFoo = pwSerde.deserializer().deserialize("someTopic", result);
+        PropagationWrapper<String> unwrappedFoo = pwSerde.deserializer().deserialize("someTopic", result);
         System.out.println("elem = " + unwrappedFoo.getElem() + ", boolean = " + unwrappedFoo.isPrintable());
         System.out.println("elem = " + fooWrap.getElem() + ", boolean = " + fooWrap.isPrintable());
         assertEquals(unwrappedFoo.isPrintable(), fooWrap.isPrintable());
         assertEquals(unwrappedFoo.getElem(), fooWrap.getElem());
 
-        PrintableWrapper<String> nullWrap = new PrintableWrapper<>(null, true);
+        PropagationWrapper<String> nullWrap = new PropagationWrapper<>(null, true);
 
         byte[] nullWrapResult = pwSerde.serializer().serialize("someTopic", nullWrap);
-        PrintableWrapper<String> someUnwrappedNullResult = pwSerde.deserializer().deserialize("someTopic", nullWrapResult);
+        PropagationWrapper<String> someUnwrappedNullResult = pwSerde.deserializer().deserialize("someTopic", nullWrapResult);
 
         System.out.println(someUnwrappedNullResult);
 
@@ -186,7 +184,7 @@ public class KTableKTableOneToManyJoinTest {
         final KTableValueGetter<String, String> getter = getterSupplier.get();
         getter.init(driver.context());
 
-        for (int i = 0; i < 3; i++) {
+        for (int i = 1; i < 2; i++) {
             driver.process(topic1, expectedKeys[i], expectedKeys[i] + ",X");
         }
         // pass tuple with null key, it will be discarded in join process
@@ -216,7 +214,11 @@ public class KTableKTableOneToManyJoinTest {
         }
         driver.flushState();
 
-        supplier2.checkAndClearProcessResult("12:value1=value1=1,XYZ,value2=1,6,YYYY,value2=6,12,ZZZZ");
+        driver.process(topic1, "1", null);
+        driver.process(topic3, "12", null);
+        driver.flushState();
+
+        supplier2.checkAndClearProcessResult("12:value1=value1=1,XYZ,value2=1,6,YYYY,value2=6,12,ZZZZ", "12:null");
     }
 
     private KeyValue<String, String> kv(final String key, final String value) {

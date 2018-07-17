@@ -24,7 +24,7 @@ public class KTableMaterializedValueGetterSupplier<K, V> implements KTableValueG
 
     private final String storeName;
 
-    KTableMaterializedValueGetterSupplier(final String storeName) {
+    public KTableMaterializedValueGetterSupplier(final String storeName) {
         this.storeName = storeName;
     }
 

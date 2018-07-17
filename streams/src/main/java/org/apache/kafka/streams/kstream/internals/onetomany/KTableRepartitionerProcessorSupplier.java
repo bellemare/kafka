@@ -56,18 +56,18 @@ public class KTableRepartitionerProcessorSupplier<KL, KR, VR> implements Process
 					if(leftOldKey.equals(extractedNewLeftKey))
 					{
 					    //Same foreign key. Just propagate onwards.
-						context().forward(combinedNewKey, new PrintableWrapper<>(change.newValue, true));
+						context().forward(combinedNewKey, new PropagationWrapper<>(change.newValue, true));
 					}
 					else  
 					{
 					    //Different Foreign Key - delete the old key value and propagate the new one.
-						context().forward(combinedOldKey, new PrintableWrapper<>(change.newValue, false));
-						context().forward(combinedNewKey, new PrintableWrapper<>(change.newValue, true));
+						context().forward(combinedOldKey, new PropagationWrapper<>(change.newValue, false));
+						context().forward(combinedNewKey, new PropagationWrapper<>(change.newValue, true));
 					}
 				}
 				else
 				{
-					context().forward(combinedOldKey, new PrintableWrapper<>(null, true));
+					context().forward(combinedOldKey, new PropagationWrapper<>(null, true));
 				}
 			}
 			else
@@ -76,7 +76,7 @@ public class KTableRepartitionerProcessorSupplier<KL, KR, VR> implements Process
 				{
 					KL extractedLeftKeyValue = mapper.apply(change.newValue);
 					CombinedKey<KL, KR> newCombinedKeyValue = new CombinedKey<>(extractedLeftKeyValue, key);
-					context().forward(newCombinedKeyValue, new PrintableWrapper<>(change.newValue, true));
+					context().forward(newCombinedKeyValue, new PropagationWrapper<>(change.newValue, true));
 				}
 				else
 				{

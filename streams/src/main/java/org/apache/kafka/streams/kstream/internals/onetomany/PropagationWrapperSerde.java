@@ -9,13 +9,13 @@ import java.util.Map;
 /**
  * Factory for creating CombinedKey serializers / deserializers.
  */
-public class PrintableWrapperSerde<V> implements Serde<PrintableWrapper<V>> {
-    final private Serializer<PrintableWrapper<V>> serializer;
-    final private Deserializer<PrintableWrapper<V>> deserializer;
+public class PropagationWrapperSerde<V> implements Serde<PropagationWrapper<V>> {
+    final private Serializer<PropagationWrapper<V>> serializer;
+    final private Deserializer<PropagationWrapper<V>> deserializer;
 
-    public PrintableWrapperSerde(Serde<V> serde) {
-        this.serializer = new PrintableWrapperSerializer<>(serde.serializer());
-        this.deserializer = new PrintableWrapperDeserializer<>(serde.deserializer());
+    public PropagationWrapperSerde(Serde<V> serde) {
+        this.serializer = new PropagationWrapperSerializer<>(serde.serializer());
+        this.deserializer = new PropagationWrapperDeserializer<>(serde.deserializer());
     }
 
     @Override
@@ -31,12 +31,12 @@ public class PrintableWrapperSerde<V> implements Serde<PrintableWrapper<V>> {
     }
 
     @Override
-    public Serializer<PrintableWrapper<V>> serializer() {
+    public Serializer<PropagationWrapper<V>> serializer() {
         return serializer;
     }
 
     @Override
-    public Deserializer<PrintableWrapper<V>> deserializer() {
+    public Deserializer<PropagationWrapper<V>> deserializer() {
         return deserializer;
     }
 

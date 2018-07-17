@@ -6,11 +6,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
 
-class PrintableWrapperSerializer<V> implements Serializer<PrintableWrapper<V>> {
+class PropagationWrapperSerializer<V> implements Serializer<PropagationWrapper<V>> {
 
     private final Serializer<V> serializer;
 
-    public PrintableWrapperSerializer(Serializer<V> serializer) {
+    public PropagationWrapperSerializer(Serializer<V> serializer) {
         this.serializer = serializer;
     }
 
@@ -20,7 +20,7 @@ class PrintableWrapperSerializer<V> implements Serializer<PrintableWrapper<V>> {
     }
 
     @Override
-    public byte[] serialize(String topic, PrintableWrapper<V> data) {
+    public byte[] serialize(String topic, PropagationWrapper<V> data) {
         //{byte boolean, stored in bit 0}{4-byte value length}{value}
 
         byte printableOut = (byte)(data.isPrintable()?1:0);
