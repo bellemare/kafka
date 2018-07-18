@@ -7,15 +7,14 @@ import org.apache.kafka.streams.kstream.internals.KTableValueGetterSupplier;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
-import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
 
-public class PostJoinRepartitionerProcessorSupplier<KR, V0> implements ProcessorSupplier<KR, Change<PropagationWrapper<V0>>> {
-    private final String topicName;
+public class PostJoinRepartitionerProcessorSupplier<KR, V0> implements KTableProcessorSupplier<KR, PropagationWrapper<V0>, V0> {
+    private final String queryableName;
 //    private final String queryableName;
 
-	public PostJoinRepartitionerProcessorSupplier(String topicName) {
-        this.topicName = topicName;
+	public PostJoinRepartitionerProcessorSupplier(String queryableName) {
+        this.queryableName = queryableName;
 	}
 
 	@Override
@@ -28,18 +27,25 @@ public class PostJoinRepartitionerProcessorSupplier<KR, V0> implements Processor
 //        return new KTableMaterializedValueGetterSupplier<>(queryableName);
 //    }
 
-    public void enableSendingOldValues() {
+	@Override
+	public KTableValueGetterSupplier<KR, V0> view() {
+		//TODO - Bellemare - handle the case where queryableName is not set... See Filter.
+		return new KTableMaterializedValueGetterSupplier<>(queryableName);
 
+	}
+
+	public void enableSendingOldValues() {
+		//Parent is a source
     }
 
-    private class PrintableWrapperProcessor extends AbstractProcessor<KR, Change<PropagationWrapper<V0>>>
+	private class PrintableWrapperProcessor extends AbstractProcessor<KR, Change<PropagationWrapper<V0>>>
 	{
         KeyValueStore<KR, V0> store;
 
 		@Override
 		public void init(final ProcessorContext context) {
 			super.init(context);
-            store = (KeyValueStore<KR, V0>) context.getStateStore(topicName);
+            store = (KeyValueStore<KR, V0>) context.getStateStore(queryableName);
 
 		}
 

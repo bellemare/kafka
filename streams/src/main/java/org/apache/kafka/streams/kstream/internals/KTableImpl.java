@@ -28,7 +28,6 @@ import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.KeyValueMapper;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Predicate;
-import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.kstream.Serialized;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
@@ -47,7 +46,6 @@ import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
-import org.apache.kafka.streams.processor.internals.ProcessorStateManager;
 import org.apache.kafka.streams.state.KeyValueBytesStoreSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.StoreBuilder;
@@ -895,11 +893,11 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 otherValueSerde,
                 joinedValueSerde);
 
-//        if (materialized != null) {
-//            final StoreBuilder<KeyValueStore<KR, V0>> storeBuilder
-//                    = new KeyValueStoreMaterializer<>(materialized).materialize();
-//            builder.internalTopologyBuilder.addStateStore(storeBuilder, joinMergeName);
-//        }
+        if (materialized != null) {
+            final StoreBuilder<KeyValueStore<KR, V0>> storeBuilder
+                    = new KeyValueStoreMaterializer<>(materialized).materialize();
+            builder.internalTopologyBuilder.addStateStore(storeBuilder, joinMergeName);
+        }
 
         return result;
     }
@@ -988,9 +986,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         //TODO - Need to rdbs.get().flush(); before each prefix scan.
         MaterializedInternal<CombinedKey<KL, KR>, VR, KeyValueStore<Bytes, byte[]>> repartitionedRangeScannableStore =
                 new MaterializedInternal<CombinedKey<KL, KR>, VR, KeyValueStore<Bytes, byte[]>>(mat, builder, "SOMEFOO");
-
+        StoreBuilder repartitionedRangeScannableStoreBuilder = new KeyValueStoreMaterializer<>(repartitionedRangeScannableStore).materialize();
         //This connects the right processor with the state store in the topology.
-        topology.addStateStore(new KeyValueStoreMaterializer<>(repartitionedRangeScannableStore).materialize(), joinOnThisTableName);
+        topology.addStateStore(repartitionedRangeScannableStoreBuilder, joinOnThisTableName);
 
 
         //TODO - REjig the right. Start
@@ -1051,12 +1049,22 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 
         //Performs Left-driven updates (ie: new One, updates the Many).
         //Produces with the Real Key.
+        String leftStoreName = builder.newStoreName("LEFT-MATERIALIZED");
+        KeyValueBytesStoreSupplier leftProcessedSupplier = new RocksDbKeyValueBytesStoreSupplier(leftStoreName);
+        Materialized leftMat = Materialized.<KR, V0>as(leftProcessedSupplier)
+                .withKeySerde(otherKeySerde)
+                .withValueSerde(joinedValueSerde);
+        MaterializedInternal<KR, V0, KeyValueStore<Bytes, byte[]>> leftMatInternal =
+                new MaterializedInternal<KR, V0, KeyValueStore<Bytes, byte[]>>(leftMat, builder, "SOMEFOO2dsf");
+        final StoreBuilder<KeyValueStore<KR, V0>> leftStoreBuilder = new KeyValueStoreMaterializer<>(leftMatInternal).materialize();
+
         KTableRangeValueGetterSupplier<CombinedKey<KL, KR>, VR> f = joinOnThisTable.valueGetterSupplier();
         KTableKTableRangeJoin<KL, KR, VL, VR, V0> joinByRange
-                = new KTableKTableRangeJoin<>(f, joiner, localSSRef); //TODO - add localSSRef here
+                = new KTableKTableRangeJoin<>(f, joiner, leftStoreName, localSSRef);
 
         //Add the left processor to the topology.
         topology.addProcessor(joinByRangeName, joinByRange, this.name);
+        topology.addStateStore(leftStoreBuilder, joinByRangeName);
 
         //Join the left and the right outputs together into a new table.
         //KTableImpl<KR, V, V0> myThis = new KTableImpl<>(builder, joinOnThisTableName, joinOnThisTable, sourceNodes, this.queryableStoreName, false);
@@ -1064,8 +1072,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 ((KTableImpl<K, ?, ?>) other).queryableStoreName, false);
 
 
-        Materialized myMat = Materialized.<KR, V0, KeyValueStore<Bytes, byte[]>>with(otherKeySerde, joinedValueSerde);
-        MaterializedInternal<KR, V0, KeyValueStore<Bytes, byte[]>> myUselessMaterializedStore = new MaterializedInternal(myMat, builder, "SOME_HANDLE_NAME");
+//        Materialized myMat = Materialized.<KR, V0, KeyValueStore<Bytes, byte[]>>with(otherKeySerde, joinedValueSerde);
+//        MaterializedInternal<KR, V0, KeyValueStore<Bytes, byte[]>> myUselessMaterializedStore = new MaterializedInternal(myMat, builder, "SOME_HANDLE_NAME");
 
 
         //Ensure that the repartitionedSource and the sourceNodes from this table are correctly co-partitioned.
@@ -1080,7 +1088,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         final KTableKTableJoinMerger<KR, V0> joinMerge = new KTableKTableJoinMerger<>(
                 myThis,
                 myThat,
-                myUselessMaterializedStore.storeName());
+                internalQueryableName);
+//                myUselessMaterializedStore.storeName());
 
         //Add the join processor to the topology.
         //topology.addProcessor(joinMergeName, joinMerge, joinOnThisTableName, joinByRangeName);
@@ -1089,19 +1098,23 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         //Connect the right processor to the repartitionedRangeScannableStore.
         topology.connectProcessorAndStateStores(joinOnThisTableName, valueGetterSupplier().storeNames());
         topology.connectProcessorAndStateStores(filterProcName, storeBuilder.name());
-        topology.connectProcessorAndStateStores(joinByRangeName, repartitionedRangeScannableStore.storeSupplier().get().name());
+        topology.connectProcessorAndStateStores(joinByRangeName, repartitionedRangeScannableStoreBuilder.name());
 
         KTable asdf = new KTableImpl<>(builder,
                 joinMergeName,
                 joinMerge,
                 sourcesNeedCopartitioning,
-                myUselessMaterializedStore.storeName(),
-                myUselessMaterializedStore.storeName() != null);
+                internalQueryableName,
+                internalQueryableName != null);
+                //myUselessMaterializedStore.storeName(),
+                //myUselessMaterializedStore.storeName() != null);
 
-        final StoreBuilder<KeyValueStore<KR, V0>> myUselessStoreBuilder
-                = new KeyValueStoreMaterializer<>(myUselessMaterializedStore).materialize();
-        builder.internalTopologyBuilder.addStateStore(myUselessStoreBuilder, joinMergeName);
-//
+        return asdf;
+
+//        final StoreBuilder<KeyValueStore<KR, V0>> myUselessStoreBuilder
+//                = new KeyValueStoreMaterializer<>(myUselessMaterializedStore).materialize();
+//        builder.internalTopologyBuilder.addStateStore(myUselessStoreBuilder, joinMergeName);
+////
 //        String asdfTableName = builder.newProcessorName(SOURCE_NAME);
 //        KTable asdf = new KTableImpl<>(builder,
 //                asdfTableName,
@@ -1113,17 +1126,16 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 //        topology.addProcessor(asdfTableName, joinMerge, joinMergeName);
 //        topology.connectProcessorAndStateStores(asdfTableName, myUselessMaterializedStore.storeName());
 //
-        String outputRepartitionSinkName = builder.newProcessorName(REPARTITION_NAME);
-        String outputRepartitionSinkTopicName = outputRepartitionSinkName + "-Topic";
-        topology.addInternalTopic(outputRepartitionSinkTopicName);
+//        String outputRepartitionSinkName = builder.newProcessorName(REPARTITION_NAME);
+//        String outputRepartitionSinkTopicName = outputRepartitionSinkName + "-Topic";
+//        topology.addInternalTopic(outputRepartitionSinkTopicName);
 //
-        asdf
-                .toStream()
-                .to(outputRepartitionSinkTopicName, Produced.with(otherKeySerde, joinedValueSerde));
-//
-        return builder.table(outputRepartitionSinkTopicName,
-                new ConsumedInternal<>(otherKeySerde, joinedValueSerde, new FailOnInvalidTimestamp(), null),
-                materialized);
-
+//        asdf
+//                .toStream()
+//                .to(outputRepartitionSinkTopicName, Produced.with(otherKeySerde, joinedValueSerde));
+////
+//        return builder.table(outputRepartitionSinkTopicName,
+//                new ConsumedInternal<>(otherKeySerde, joinedValueSerde, new FailOnInvalidTimestamp(), null),
+//                materialized);
     }
 }

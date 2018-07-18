@@ -3,31 +3,36 @@ package org.apache.kafka.streams.kstream.internals.onetomany;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.errors.StreamsException;
 import org.apache.kafka.streams.kstream.ValueJoiner;
-import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.kstream.internals.Change;
+import org.apache.kafka.streams.kstream.internals.KTableImpl;
+import org.apache.kafka.streams.kstream.internals.KTableMaterializedValueGetterSupplier;
+import org.apache.kafka.streams.kstream.internals.KTableProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.KTableRangeValueGetter;
 import org.apache.kafka.streams.kstream.internals.KTableRangeValueGetterSupplier;
+import org.apache.kafka.streams.kstream.internals.KTableValueGetterSupplier;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
-import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.state.KeyValueIterator;
+import org.apache.kafka.streams.state.KeyValueStore;
 
 
-public class KTableKTableRangeJoin<KL, KR, VL, VR, V> implements ProcessorSupplier<KL, Change<VL>> {
+public class KTableKTableRangeJoin<KL, KR, VL, VR, V> implements KTableProcessorSupplier<KL, VL, V> {
 
-	private ValueJoiner<VL, VR, V> joiner;
-	private KTableRangeValueGetterSupplier<CombinedKey<KL,KR>,VR> right;
+	private final ValueJoiner<VL, VR, V> joiner;
+	private final KTableRangeValueGetterSupplier<CombinedKey<KL,KR>,VR> right;
+	private final String queryableName;
 	private final StateStore ref;
 
     //Performs Left-driven updates (ie: new One, updates the Many).
-    public KTableKTableRangeJoin(KTableRangeValueGetterSupplier<CombinedKey<KL,KR>,VR> right,
-                                 ValueJoiner<VL, VR, V> joiner,
-                                 StateStore ref){
-
+    public KTableKTableRangeJoin(final KTableRangeValueGetterSupplier<CombinedKey<KL,KR>,VR> right,
+                                 final ValueJoiner<VL, VR, V> joiner,
+                                 final String queryableName,
+                                 final StateStore ref){
     	this.right = right;
         this.joiner = joiner;
+        this.queryableName = queryableName;
         this.ref = ref;
     }
 
@@ -36,13 +41,19 @@ public class KTableKTableRangeJoin<KL, KR, VL, VR, V> implements ProcessorSuppli
         return new KTableKTableJoinProcessor(right);
     }
 
-    public void enableSendingOldValues() {
+    @Override
+    public KTableValueGetterSupplier<KL, V> view() {
+        return new KTableMaterializedValueGetterSupplier<>(queryableName);
+    }
 
+    public void enableSendingOldValues() {
+        //TODO - Bellemare - evaluate if I need to propagate this upwards
     }
 
     private class KTableKTableJoinProcessor extends AbstractProcessor<KL, Change<VL>> {
 
-		private KTableRangeValueGetter<CombinedKey<KL,KR>,VR> rightValueGetter;
+		private final KTableRangeValueGetter<CombinedKey<KL,KR>,VR> rightValueGetter;
+        private KeyValueStore<KR, V> store;
 
         public KTableKTableJoinProcessor(KTableRangeValueGetterSupplier<CombinedKey<KL,KR>,VR> right) {
             this.rightValueGetter = right.get();
@@ -53,6 +64,9 @@ public class KTableKTableRangeJoin<KL, KR, VL, VR, V> implements ProcessorSuppli
         public void init(ProcessorContext context) {
             super.init(context);
             rightValueGetter.init(context);
+            if (queryableName != null) {
+                store = (KeyValueStore<KR, V>) context.getStateStore(queryableName);
+            }
         }
 
         /**
@@ -86,6 +100,7 @@ public class KTableKTableRangeJoin<KL, KR, VL, VR, V> implements ProcessorSuppli
                       newValue = joiner.apply(leftChange.newValue, value2);
                   }
 
+                  store.put(realKey, newValue);
                   context().forward(realKey, new Change<>(newValue, oldValue));
             }
         }
