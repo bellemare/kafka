@@ -26,6 +26,7 @@ import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.processor.StateStore;
+import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.state.KeyValueBytesStoreSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.QueryableStoreType;
@@ -1093,6 +1094,39 @@ public interface KTable<K, V> {
     <VO, VR> KTable<K, VR> outerJoin(final KTable<K, VO> other,
                                      final ValueJoiner<? super V, ? super VO, ? extends VR> joiner,
                                      final Materialized<K, VR, KeyValueStore<Bytes, byte[]>> materialized);
+
+    /**
+     *
+     * Joins one record of this KTable to n records of the other KTable
+     * an event in this KTabl will produce n consecutive events an update
+     * in other table will update only the 1 matched record
+     *
+     * @param other the table containing n records for each K of this table
+     * @param keyExtractor a {@code ValueMapper} returning the key of this table from the others value
+     * @param <KR> the right, and the resulting, table Key
+     * @param <V0> the resulting tables Value
+     * @param joiner
+     * @return
+     */
+
+    <V0, KL, VL, KR, VR> KTable<KL, V0> joinOnForeignKey(final KTable<KR, VR> other,
+                                                         final ValueMapper<VL, KR> keyExtractor,
+                                                         final ValueJoiner<VL, VR, V0> joiner,
+                                                         final Materialized<KL, V0, KeyValueStore<Bytes, byte[]>> materialized,
+                                                         final Serde<KL> thisKeySerde,
+                                                         final Serde<VL> thisValueSerde,
+                                                         final Serde<KR> otherKeySerde,
+                                                         final Serde<V0> joinedValueSerde);
+
+    <V0, KL, VL, KR, VR> KTable<KL, V0> joinOnForeignKey(final KTable<KR, VR> other,
+                                                         final ValueMapper<VL, KR> keyExtractor,
+                                                         final ValueJoiner<VL, VR, V0> joiner,
+                                                         final Materialized<KL, V0, KeyValueStore<Bytes, byte[]>> materialized,
+                                                         final StreamPartitioner<KR,?> foreignKeyPartitioner,
+                                                         final Serde<KL> thisKeySerde,
+                                                         final Serde<VL> thisValueSerde,
+                                                         final Serde<KR> otherKeySerde,
+                                                         final Serde<V0> joinedValueSerde);
 
     /**
      * Get the name of the local state store used that can be used to query this {@code KTable}.
