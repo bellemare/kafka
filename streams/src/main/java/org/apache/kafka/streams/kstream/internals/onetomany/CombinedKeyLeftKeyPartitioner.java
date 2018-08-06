@@ -24,13 +24,13 @@ public class CombinedKeyLeftKeyPartitioner<KL,KR,V> implements StreamPartitioner
 	}
 
 	@Override
-	public Integer partition(CombinedKey<KL, KR> key, V value, int numPartitions) {
+	public Integer partition(String topic, CombinedKey<KL, KR> key, V value, int numPartitions) {
 		if (null == streamPartitioner) {
 			byte[] keyBytes = keySerializer.serialize(topic, key.getForeignKey());
 			//TODO - Evaluate breaking this out of the DefaultPartitioner Producer into an accessible function.
 			return Utils.toPositive(Utils.murmur2(keyBytes)) % numPartitions;
 		} else {
-			return streamPartitioner.partition(key.getForeignKey(), value, numPartitions);
+			return streamPartitioner.partition(topic, key.getForeignKey(), value, numPartitions);
 		}
 	}
 }

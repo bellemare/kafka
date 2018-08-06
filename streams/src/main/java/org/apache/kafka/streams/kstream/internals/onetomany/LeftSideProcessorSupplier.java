@@ -101,6 +101,6 @@ public class LeftSideProcessorSupplier<KL, KR, VL, VR, V>
 
 
     public KTableRangeValueGetterSupplier<CombinedKey<KR,KL>,VL> valueGetterSupplier() {
-    	return new KTableSourceValueGetterSupplier<>(topicName);
+    	return new KTableSourceValueGetterSupplier<CombinedKey<KR,KL>, VL>(topicName);
     }
 }
