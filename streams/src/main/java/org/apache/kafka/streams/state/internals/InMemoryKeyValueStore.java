@@ -147,6 +147,14 @@ public class InMemoryKeyValueStore<K, V> implements KeyValueStore<K, V> {
         return new DelegatingPeekingKeyValueIterator<>(name, new InMemoryKeyValueIterator<>(copy.entrySet().iterator()));
     }
 
+    /**
+     * @throws UnsupportedOperationException
+     */
+    @Override
+    public KeyValueIterator<K, V> prefixScan(K prefix) {
+        throw new UnsupportedOperationException("prefixScan() not supported in " + getClass().getName());
+    }
+
     @Override
     public long approximateNumEntries() {
         return this.map.size();

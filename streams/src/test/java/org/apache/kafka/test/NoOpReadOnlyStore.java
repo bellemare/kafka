@@ -63,6 +63,11 @@ public class NoOpReadOnlyStore<K, V>
     }
 
     @Override
+    public KeyValueIterator<K, V> prefixScan(K prefix) {
+        return null;
+    }
+
+    @Override
     public long approximateNumEntries() {
         return 0L;
     }

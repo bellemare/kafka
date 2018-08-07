@@ -808,9 +808,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         builder.internalTopologyBuilder.addStateStore(storeBuilder, outputProcessorName);
         builder.internalTopologyBuilder.connectProcessorAndStateStores(outputProcessorName, storeBuilder.name());
 
-
         return new KTableImpl<>(builder, outputProcessorName, outputProcessor, thisKeySerde, joinedValueSerde,
-                Collections.singleton(finalRepartitionSourceName), materialized.storeName(), true);
+                Collections.singleton(finalRepartitionSourceName), materialized.storeName(), true, null);
     }
 
 }

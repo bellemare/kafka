@@ -214,6 +214,11 @@ public class MeteredKeyValueStore<K, V> extends WrappedStateStore.AbstractStateS
     }
 
     @Override
+    public KeyValueIterator<K, V> prefixScan(K prefix) {
+        return new MeteredKeyValueIterator(this.inner.prefixScan(Bytes.wrap(serdes.rawKey(prefix))), this.allTime);
+    }
+
+    @Override
     public void flush() {
         if (flushTime.shouldRecord()) {
             measureLatency(
