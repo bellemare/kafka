@@ -1044,7 +1044,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         final String outputProcessorName = builder.newProcessorName(SOURCE_NAME);
         //Hook up the highwatermark output to KTableSource Processor
         builder.internalTopologyBuilder.addProcessor(outputProcessorName, outputProcessor, highwaterProcessorName);
-        builder.internalTopologyBuilder.connectProcessors(outputProcessorName, highwaterProcessorName);
 
         final StoreBuilder<KeyValueStore<KL, V0>> storeBuilder
                 = new KeyValueStoreMaterializer<>(materialized).materialize();

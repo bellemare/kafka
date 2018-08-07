@@ -138,7 +138,7 @@ public class KTableKTableOneToManyJoinTest {
 
         final Collection<Set<String>> copartitionGroups = StreamsBuilderTest.getCopartitionedGroups(builder);
 
-        assertEquals(1, copartitionGroups.size());
+        assertEquals(2, copartitionGroups.size());
 
         final KTableValueGetterSupplier<String, String> getterSupplier = ((KTableImpl<String, String, String>) joined).valueGetterSupplier();
 
