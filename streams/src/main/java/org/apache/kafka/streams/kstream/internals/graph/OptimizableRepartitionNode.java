@@ -22,9 +22,14 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.processor.FailOnInvalidTimestamp;
+import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
 
+import java.util.stream.Stream;
+
 public class OptimizableRepartitionNode<K, V> extends BaseRepartitionNode {
+
+    private StreamPartitioner<K,V> streamPartitioner;
 
     OptimizableRepartitionNode(final String nodeName,
                                final String sourceName,
@@ -32,18 +37,19 @@ public class OptimizableRepartitionNode<K, V> extends BaseRepartitionNode {
                                final Serde<K> keySerde,
                                final Serde<V> valueSerde,
                                final String sinkName,
-                               final String repartitionTopic) {
+                               final String repartitionTopic,
+                               final StreamPartitioner<K,V> streamPartitioner) {
 
         super(
-            nodeName,
-            sourceName,
-            processorParameters,
-            keySerde,
-            valueSerde,
-            sinkName,
-            repartitionTopic
+                nodeName,
+                sourceName,
+                processorParameters,
+                keySerde,
+                valueSerde,
+                sinkName,
+                repartitionTopic
         );
-
+        this.streamPartitioner = streamPartitioner;
     }
 
     @Override
@@ -79,7 +85,7 @@ public class OptimizableRepartitionNode<K, V> extends BaseRepartitionNode {
             repartitionTopic,
             keySerializer,
             getValueSerializer(),
-            null,
+            streamPartitioner,
             processorParameters.processorName()
         );
 
@@ -108,6 +114,7 @@ public class OptimizableRepartitionNode<K, V> extends BaseRepartitionNode {
         private String sinkName;
         private String sourceName;
         private String repartitionTopic;
+        private StreamPartitioner<K,V> streamPartitioner;
 
         private OptimizableRepartitionNodeBuilder() {
         }
@@ -148,6 +155,11 @@ public class OptimizableRepartitionNode<K, V> extends BaseRepartitionNode {
             return this;
         }
 
+        public OptimizableRepartitionNodeBuilder<K, V> withStreamPartitioner(final StreamPartitioner<K,V> streamPartitioner) {
+            this.streamPartitioner = streamPartitioner;
+            return this;
+        }
+
         public OptimizableRepartitionNode<K, V> build() {
 
             return new OptimizableRepartitionNode<>(
@@ -157,7 +169,8 @@ public class OptimizableRepartitionNode<K, V> extends BaseRepartitionNode {
                 keySerde,
                 valueSerde,
                 sinkName,
-                repartitionTopic
+                repartitionTopic,
+                streamPartitioner
             );
 
         }
