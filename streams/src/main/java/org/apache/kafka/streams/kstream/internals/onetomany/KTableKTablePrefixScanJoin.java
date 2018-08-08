@@ -1,5 +1,6 @@
 package org.apache.kafka.streams.kstream.internals.onetomany;
 
+import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.errors.StreamsException;
 import org.apache.kafka.streams.kstream.ValueJoiner;
@@ -38,6 +39,7 @@ public class KTableKTablePrefixScanJoin<KL, KR, VL, VR, V> implements ProcessorS
     private class KTableKTableJoinProcessor extends AbstractProcessor<KR, Change<VR>> {
 
 		private final KTableRangeValueGetter<CombinedKey<KR,KL>,VL> leftValueGetter;
+		private final byte[] negativeOneLong = Serdes.Long().serializer().serialize("fakeTopic", -1L);
 
         public KTableKTableJoinProcessor(KTableRangeValueGetterSupplier<CombinedKey<KR,KL>,VL> left) {
             this.leftValueGetter = left.get();
@@ -92,6 +94,8 @@ public class KTableKTablePrefixScanJoin<KL, KR, VL, VR, V> implements ProcessorS
                 }
                 //TODO - Possibly rework this so that it's a different wrapper. We don't need the printable part anymore, but it's annoying to have to create another nearly-the-same class.
                 //Using -1 because we will not have race conditions from this side of the join to disambiguate with source offset.
+                context().headers().remove("offset");
+                context().headers().add("offset", negativeOneLong);
                 PropagationWrapper<V> newWrappedVal = new PropagationWrapper<>(newValue, true, -1);
                 PropagationWrapper<V> oldWrappedVal = new PropagationWrapper<>(oldValue, true, -1);
 

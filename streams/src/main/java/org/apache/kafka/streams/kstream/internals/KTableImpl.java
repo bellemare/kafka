@@ -808,8 +808,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 outputProcessorName
         );
 
-        //String someOutputNodeName = builder.newProcessorName("BELLEMARE-PREFIX");
-
         KTableKTableForeignKeyJoinNode outputNode = new KTableKTableForeignKeyJoinNode<V0, KL, VL, KR, VR>(
                 outputProcessorName,
                 repartitionTopicName,

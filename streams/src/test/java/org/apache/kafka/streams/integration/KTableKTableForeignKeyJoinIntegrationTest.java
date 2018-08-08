@@ -143,15 +143,19 @@ public class KTableKTableForeignKeyJoinIntegrationTest {
 
     @Test
     public void shouldInnerInnerJoinQueryable() throws InterruptedException {
-        List<KeyValue<String, String>> expected = new ArrayList<>();
-        expected.add(new KeyValue<>("a", "value1=1,A1,value2=E8"));
-        expected.add(new KeyValue<>("b", "value1=1,B1,value2=E8"));
-        verifyKTableKTableJoin(JoinType.INNER, JoinType.INNER, expected, true);
+        List<KeyValue<String, String>> expectedOne = new ArrayList<>();
+        expectedOne.add(new KeyValue<>("a", "value1=1,A1,value2=E8"));
+        expectedOne.add(new KeyValue<>("b", "value1=1,B1,value2=E8"));
+
+        List<KeyValue<String, String>> expectedTwo = new ArrayList<>();
+        expectedTwo.add(new KeyValue<>("c", "value1=2,C1,value2=E9"));
+        verifyKTableKTableJoin(JoinType.INNER, JoinType.INNER, expectedOne, expectedTwo, true);
     }
 
     private void verifyKTableKTableJoin(final JoinType joinType1,
                                         final JoinType joinType2,
                                         final List<KeyValue<String, String>> expectedResult,
+                                        final List<KeyValue<String, String>> expectedResultTwo,
                                         boolean verifyQueryableState) throws InterruptedException {
         final String queryableName = verifyQueryableState ? joinType1 + "-" + joinType2 + "-ktable-ktable-joinOnForeignKey-query" : null;
         streamsConfig.put(StreamsConfig.APPLICATION_ID_CONFIG, joinType1 + "-" + joinType2 + "-ktable-ktable-joinOnForeignKey" + queryableName);
@@ -165,6 +169,37 @@ public class KTableKTableForeignKeyJoinIntegrationTest {
                 expectedResult.size());
 
         assertThat(result, equalTo(expectedResult));
+//
+//        //Now, try re-assigning the foreignKey
+//        final List<KeyValue<String, String>> table1 = Arrays.asList(
+//                new KeyValue<>("c", "2,C1")
+//        );
+//        final Properties producerConfig = new Properties();
+//        producerConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
+//        producerConfig.put(ProducerConfig.ACKS_CONFIG, "all");
+//        producerConfig.put(ProducerConfig.RETRIES_CONFIG, 0);
+//        producerConfig.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+//        producerConfig.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+//
+//        try {
+//            IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1, producerConfig, MOCK_TIME);
+//        } catch (Exception e) {
+//            System.out.println("I am not a clever man");
+//        }
+//
+//        final List<KeyValue<String, String>> resultTwo = IntegrationTestUtils.waitUntilMinKeyValueRecordsReceived(
+//                CONSUMER_CONFIG,
+//                OUTPUT,
+//                expectedResultTwo.size());
+//
+//        for (KeyValue<String, String> stringStringKeyValue : resultTwo) {
+//            System.out.println("Bellemare Test = " + stringStringKeyValue);
+//        }
+//
+//        System.out.println("Bellemare PreAssert");
+//
+//        assertThat(resultTwo, equalTo(expectedResultTwo));
+//        System.out.println("Bellemare PostAssert");
 
         if (verifyQueryableState) {
             verifyKTableKTableJoinQueryableState(joinType1, joinType2, expectedResult);

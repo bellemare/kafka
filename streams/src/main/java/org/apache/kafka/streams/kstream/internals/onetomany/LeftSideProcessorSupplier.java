@@ -1,5 +1,8 @@
 package org.apache.kafka.streams.kstream.internals.onetomany;
 
+import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.header.Headers;
+import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.kstream.internals.KTableRangeValueGetterSupplier;
@@ -53,9 +56,15 @@ public class LeftSideProcessorSupplier<KL, KR, VL, VR, V>
             @Override
             public void process(CombinedKey<KR,KL> key, PropagationWrapper<VL> value)
             {
+
+                Headers readHead = context().headers();
+                byte[] propagateBytes = readHead.lastHeader("propagate").value();
+                boolean propagate = propagateBytes[0] == 1;
+
                 //We don't want to propagate a null due to a foreign-key change past this point.
                 //Propagation of the updated value will occur in a different partition. State store needs deletion.
-                if (!value.isPropagate()) {
+                //if (!value.isPropagate()) {
+                if (!propagate) {
                     store.delete(key);
 //                    System.out.println("Deleted the value of "+key.toString()+" from store due to isPropagate");
                     return;

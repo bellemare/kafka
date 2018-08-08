@@ -1,5 +1,7 @@
 package org.apache.kafka.streams.kstream.internals.onetomany;
 
+import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
@@ -43,14 +45,18 @@ public class HighwaterResolverProcessorSupplier<KL, V>
                 //highwater = X, value(offset = x-1, null)      => Do not send, it is an out-of-order, old update.
                 //highwater = X, value(offset = x-1, non-null)  => Do not send, it is an out-of-order, old update.
 
+                byte[] offsetHeader = context().headers().lastHeader("offset").value();
+                Long offset = Serdes.Long().deserializer().deserialize("fakeTopic", offsetHeader);
+
                 final Long highwater = offsetHighWaterStore.get(key);
-                if (null == highwater || value.newValue.getOffset() >= highwater ) {
+                //if (null == highwater || value.newValue.getOffset() >= highwater ) {
+                if (null == highwater || offset >= highwater ) {
                     // using greater-than to capture new highwater events.
                     // using equal as we want to resend in the case of a node failure.
-                    offsetHighWaterStore.put(key, value.newValue.getOffset());
+                    offsetHighWaterStore.put(key, offset);
                     context().forward(key, value.newValue.getElem());
-                } else if (value.newValue.getOffset() == -1 ) {
-                    //TODO - Is there a better way to forward from the left? Perhaps the topic metadata?
+                } else if (offset == -1L ) {
+                    //TODO - Is there a better way to forward from the right? Perhaps the topic metadata?
                     context().forward(key, value.newValue.getElem());
                 }
             }
