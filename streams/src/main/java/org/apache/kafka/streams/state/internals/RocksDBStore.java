@@ -511,7 +511,7 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
 
         @Override
         public Bytes peekNextKey() {
-            if (!hasNext()) {
+            if (!super.hasNext()) { //TODO - Bellemare. Had to change this to super as it was stack overflowing... wtf.
                 throw new NoSuchElementException();
             }
             return next.key;
@@ -567,7 +567,7 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
                 return false;
             }
 
-            byte[] rawNextKey = super.peek().key.get();
+            byte[] rawNextKey = super.peekNextKey().get();
             for (int i = 0; i < rawPrefix.length; i++) {
                 if (i == rawNextKey.length) {
                     throw new ArrayIndexOutOfBoundsException("Unexpected RocksDB Key Value. Should have been skipped with seek.");

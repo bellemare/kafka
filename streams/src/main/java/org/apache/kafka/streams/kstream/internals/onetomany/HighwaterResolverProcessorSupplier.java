@@ -7,8 +7,8 @@ import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
 
-public class HighwaterResolverProcessorSupplier<KR, V>
-        implements ProcessorSupplier<KR, Change<PropagationWrapper<V>>>
+public class HighwaterResolverProcessorSupplier<KL, V>
+        implements ProcessorSupplier<KL, Change<PropagationWrapper<V>>>
 {
 
     private final String stateStoreName;
@@ -20,21 +20,21 @@ public class HighwaterResolverProcessorSupplier<KR, V>
     }
 
     @Override
-    public Processor<KR, Change<PropagationWrapper<V>>> get()
+    public Processor<KL, Change<PropagationWrapper<V>>> get()
     {
-        return new AbstractProcessor<KR, Change<PropagationWrapper<V>>>()
+        return new AbstractProcessor<KL, Change<PropagationWrapper<V>>>()
         {
-            private KeyValueStore<KR, Long> offsetHighWaterStore;
+            private KeyValueStore<KL, Long> offsetHighWaterStore;
 
             @Override
             public void init(ProcessorContext context)
             {
                 super.init(context);
-                this.offsetHighWaterStore = (KeyValueStore<KR, Long>) context.getStateStore(stateStoreName);
+                this.offsetHighWaterStore = (KeyValueStore<KL, Long>) context.getStateStore(stateStoreName);
             }
 
             @Override
-            public void process(KR key, Change<PropagationWrapper<V>> value)
+            public void process(KL key, Change<PropagationWrapper<V>> value)
             {
                 //highwater = X, value(offset = x+1, null)      => update & send
                 //highwater = X, value(offset = x+1, non-null)  => update & send

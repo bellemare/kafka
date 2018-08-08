@@ -59,9 +59,10 @@ public class ChangedSerializer<T> implements ExtendedSerializer<Change<T>> {
 
         // only one of the old / new values would be not null
         if (data.newValue != null) {
-            if (data.oldValue != null)
-                throw new StreamsException("Both old and new values are not null (" + data.oldValue
-                        + " : " + data.newValue + ") in ChangeSerializer, which is not allowed.");
+//TODO -Bellemare - undo this
+//            if (data.oldValue != null)
+//                throw new StreamsException("Both old and new values are not null (" + data.oldValue
+//                        + " : " + data.newValue + ") in ChangeSerializer, which is not allowed.");
 
             serializedKey = inner.serialize(topic, headers, data.newValue);
         } else {

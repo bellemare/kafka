@@ -34,6 +34,7 @@ import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.kstream.ValueMapperWithKey;
 import org.apache.kafka.streams.kstream.ValueTransformerWithKeySupplier;
+import org.apache.kafka.streams.kstream.internals.graph.KTableKTableForeignKeyJoinNode;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableJoinNode;
 import org.apache.kafka.streams.kstream.internals.graph.OptimizableRepartitionNode;
 import org.apache.kafka.streams.kstream.internals.graph.ProcessorGraphNode;
@@ -767,137 +768,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         final MaterializedInternal<KL, Long, KeyValueStore<Bytes, byte[]>> highwaterMatInternal =
                 new MaterializedInternal<KL, Long, KeyValueStore<Bytes, byte[]>>(highwaterMat);
 
-    //OptimizableRepartitionNode
-        builder.internalTopologyBuilder.addInternalTopic(repartitionTopicName);
-//        builder.internalTopologyBuilder.addProcessor(repartitionProcessorName, repartitionProcessor, this.name);
-//        //Repartition to the KR prefix of the CombinedKey.
-//        builder.internalTopologyBuilder.addSink(repartitionSinkName, repartitionTopicName,
-//                combinedKeySerde.serializer(), propagationWrapperSerde.serializer(),
-//                partitioner, repartitionProcessorName);
-//        builder.internalTopologyBuilder.addSource(null, repartitionSourceName, new FailOnInvalidTimestamp(),
-//                combinedKeySerde.deserializer(), propagationWrapperSerde.deserializer(), repartitionTopicName);
-    //End//
-
-        final ProcessorParameters processorParameters = new ProcessorParameters<>(
-                repartitionProcessor,
-                repartitionProcessorName
-        );
-        final OptimizableRepartitionNode.OptimizableRepartitionNodeBuilder<CombinedKey<KR,KL>, PropagationWrapper<VL>> stageOneRepartitionNodeBuilder = OptimizableRepartitionNode.optimizableRepartitionNodeBuilder();
-        OptimizableRepartitionNode stageOneRepartitionNode = stageOneRepartitionNodeBuilder.withKeySerde(combinedKeySerde)
-                .withValueSerde(propagationWrapperSerde)
-                .withSourceName(repartitionSourceName)
-                .withRepartitionTopic(repartitionTopicName)
-                .withSinkName(repartitionSinkName)
-                .withStreamPartitioner(partitioner)
-                .withProcessorParameters(processorParameters)
-                //Reusing the sourceNodeName as the graph node name.
-                .withNodeName(repartitionSourceName)
-                .build();
-
-        builder.addGraphNode(this.streamsGraphNode, stageOneRepartitionNode);
-
-        final ProcessorParameters oneToOneJoinBuilderProcParams = new ProcessorParameters<>(
-                joinOneToOne,
-                joinOneToOneName
-        );
-
-        StatefulProcessorNode.StatefulProcessorNodeBuilder<CombinedKey<KR,KL>,VL> oneToOneJoinBuilder = StatefulProcessorNode.statefulProcessorNodeBuilder();
-        StatefulProcessorNode oneToOneJoinNode = oneToOneJoinBuilder.withProcessorParameters(oneToOneJoinBuilderProcParams)
-                .withNodeName(joinOneToOneName)
-                .withStoreBuilder(new KeyValueStoreMaterializer<>(repartitionedRangeScannableStore).materialize())
-                .withStoreNames(((KTableImpl) other).valueGetterSupplier().storeNames())
-                .withRepartitionRequired(false)//TODO - Bellemare Do I need to change this?
-                .build();
-
-        builder.addGraphNode(stageOneRepartitionNode, oneToOneJoinNode);
-
-    //Add StatefulProcessorNode
-//        builder.internalTopologyBuilder.addProcessor(joinOneToOneName, joinOneToOne, repartitionSourceName);
-//        //Connect the left processor with the state store.
-//        builder.internalTopologyBuilder.addStateStore(new KeyValueStoreMaterializer<>(repartitionedRangeScannableStore).materialize(), joinOneToOneName);
-//        builder.internalTopologyBuilder.connectProcessorAndStateStores(joinOneToOneName, ((KTableImpl) other).valueGetterSupplier().storeNames());
-    //END//
-
-
-//    //StatefulProcessorNode
-//        //Add the right processor to the topology.
-//        builder.internalTopologyBuilder.addProcessor(joinByPrefixName, joinByPrefix, ((AbstractStream)other).name);
-//        //Doesn't add state store...
-//        builder.internalTopologyBuilder.connectProcessorAndStateStores(joinByPrefixName, rangeScannableDBRef.name());
-//    //END//
-
-        final ProcessorParameters joinByRangeBuilderProcParams = new ProcessorParameters<>(
-                joinByPrefix,
-                joinByPrefixName
-        );
-        StatefulProcessorNode.StatefulProcessorNodeBuilder<?,?> joinByPrefixBuilder = StatefulProcessorNode.statefulProcessorNodeBuilder();
-        String[] joinByPrefixNodeStoreName = {rangeScannableDBRef.name()};
-        StatefulProcessorNode joinByPrefixNode = joinByPrefixBuilder.withProcessorParameters(joinByRangeBuilderProcParams)
-                .withNodeName(joinByPrefixName)
-                .withStoreBuilder(null)
-                .withStoreNames(joinByPrefixNodeStoreName)
-                .withRepartitionRequired(false)//TODO - Bellemare Do I need to change this?
-                .build();
-
-        builder.addGraphNode(((KTableImpl<?, ?, ?>) other).streamsGraphNode, joinByPrefixNode);
-
-        builder.internalTopologyBuilder.addInternalTopic(finalRepartitionTopicName);
-        //Repartition back to the original partitioning structure
-
-        StreamSinkNode joinedSink = new StreamSinkNode<>("joinedSink",
-                new StaticTopicNameExtractor(finalRepartitionTopicName),
-                new ProducedInternal(Produced.with(thisKeySerde, changedSerde)));
-
-//        StreamSinkNode rightSink = new StreamSinkNode<>("rightSink",
-//                new StaticTopicNameExtractor(finalRepartitionTopicName),
-//                new ProducedInternal(Produced.with(thisKeySerde, changedSerde)));
-        HashSet<StreamsGraphNode> sinkPredecessors = new HashSet<>();
-        sinkPredecessors.add(oneToOneJoinNode);
-        sinkPredecessors.add(joinByPrefixNode);
-
-        builder.addGraphNode(sinkPredecessors, joinedSink);
-
-//        builder.internalTopologyBuilder.addSink(finalRepartitionSinkName, finalRepartitionTopicName,
-//                thisKeySerde.serializer(), changedSerializer,
-//                null,
-//                joinByPrefixName, joinOneToOneName);
-
-        StreamSourceNode<KL, Change<PropagationWrapper<V0>>> sourceNode = new StreamSourceNode<KL, Change<PropagationWrapper<V0>>>(
-                finalRepartitionSourceName,
-                Collections.singleton(finalRepartitionTopicName),
-                new ConsumedInternal<>(Consumed.<KL, Change<PropagationWrapper<V0>>>with(thisKeySerde, changedSerde)));
-
-
-//        builder.internalTopologyBuilder.addSource(null, finalRepartitionSourceName, new FailOnInvalidTimestamp(),
-//                thisKeySerde.deserializer(), changedDeserializer, finalRepartitionTopicName);
-
-        builder.addGraphNode(joinedSink, sourceNode);
-
-//    //StatefulProcessorNode
-//        //Connect highwaterProcessor to source, add the state store, and connect the statestore with the processor.
-//        builder.internalTopologyBuilder.addProcessor(highwaterProcessorName, highwaterProcessor, finalRepartitionSourceName);
-//        builder.internalTopologyBuilder.addStateStore(new KeyValueStoreMaterializer<>(highwaterMatInternal).materialize(), highwaterProcessorName);
-//        builder.internalTopologyBuilder.connectProcessorAndStateStores(highwaterProcessorName, finalRepartitionTableName);
-//    //END//
-
-        final ProcessorParameters highwaterBuilderProcParams = new ProcessorParameters<>(
-                highwaterProcessor,
-                highwaterProcessorName
-        );
-        StatefulProcessorNode.StatefulProcessorNodeBuilder<?,?> highwaterBuilder = StatefulProcessorNode.statefulProcessorNodeBuilder();
-
-        String[] highwaterPredecessor = {finalRepartitionTableName};
-        StatefulProcessorNode highwaterNode = highwaterBuilder
-                .withProcessorParameters(highwaterBuilderProcParams)
-                .withRepartitionRequired(false) //TODO - Yay or Nay?
-                .withStoreBuilder(new KeyValueStoreMaterializer<>(highwaterMatInternal).materialize())
-                .withStoreNames(highwaterPredecessor)
-                .withNodeName(highwaterProcessorName)
-                .build();
-
-        builder.addGraphNode(sourceNode, highwaterNode);
-
-
+        KTableSource outputProcessor = new KTableSource<K, V0>(materialized.storeName());
+        final String outputProcessorName = builder.newProcessorName(SOURCE_NAME);
+        //Hook up the highwatermark output to KTableSource Processor
 
         //Final output and input need to be partitioned identically.
         final HashSet<String> stageOneAndOtherCopartition = new HashSet<>();
@@ -910,39 +783,63 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         outputAndThisCopartition.addAll(sourceNodes);
         builder.internalTopologyBuilder.copartitionSources(outputAndThisCopartition);
 
+        ProcessorParameters repartitionProcessorParameters = new ProcessorParameters<>(
+                repartitionProcessor,
+                repartitionProcessorName
+        );
 
-        KTableSource outputProcessor = new KTableSource<K, V0>(materialized.storeName());
-        final String outputProcessorName = builder.newProcessorName(SOURCE_NAME);
-        //Hook up the highwatermark output to KTableSource Processor
+        ProcessorParameters joinOneToOneProcessorParameters = new ProcessorParameters<>(
+                joinOneToOne,
+                joinOneToOneName
+        );
 
-//    //Stateful Store
-//        builder.internalTopologyBuilder.addProcessor(outputProcessorName, outputProcessor, highwaterProcessorName);
-//        final StoreBuilder<KeyValueStore<KL, V0>> storeBuilder
-//                = new KeyValueStoreMaterializer<>(materialized).materialize();
-//        builder.internalTopologyBuilder.addStateStore(storeBuilder, outputProcessorName);
-//        builder.internalTopologyBuilder.connectProcessorAndStateStores(outputProcessorName, storeBuilder.name());
-//    //END //
+        ProcessorParameters joinByPrefixProcessorParameters = new ProcessorParameters<>(
+                joinByPrefix,
+                joinByPrefixName
+        );
 
-        final ProcessorParameters outputBuilderProcParams = new ProcessorParameters<>(
+        ProcessorParameters highwaterProcessorParameters = new ProcessorParameters<>(
+                highwaterProcessor,
+                highwaterProcessorName
+        );
+
+        ProcessorParameters outputProcessorParameters = new ProcessorParameters<>(
                 outputProcessor,
                 outputProcessorName
         );
-        StatefulProcessorNode.StatefulProcessorNodeBuilder<?,?> outputBuilder = StatefulProcessorNode.statefulProcessorNodeBuilder();
 
-        String[] outputPredecessor = {highwaterProcessorName};
-        StatefulProcessorNode outputNode = outputBuilder
-                .withProcessorParameters(outputBuilderProcParams)
-                .withRepartitionRequired(false) //TODO - Yay or Nay?
-                .withStoreBuilder(new KeyValueStoreMaterializer<>(materialized).materialize())
-                .withStoreNames(outputPredecessor)
-                .withNodeName(outputProcessorName)
-                .build();
+        //String someOutputNodeName = builder.newProcessorName("BELLEMARE-PREFIX");
 
-        builder.addGraphNode(highwaterNode, outputNode);
+        KTableKTableForeignKeyJoinNode outputNode = new KTableKTableForeignKeyJoinNode<V0, KL, VL, KR, VR>(
+                outputProcessorName,
+                repartitionTopicName,
+                repartitionSinkName,
+                repartitionSourceName,
+                repartitionProcessorParameters,
+                joinOneToOneProcessorParameters,
+                combinedKeySerde,
+                propagationWrapperSerde,
+                partitioner,
+                repartitionedRangeScannableStore,
+                joinByPrefixProcessorParameters,
+                finalRepartitionTopicName,
+                finalRepartitionSinkName,
+                finalRepartitionSourceName,
+                thisKeySerde,
+                changedSerde,
+                highwaterProcessorParameters,
+                highwaterMatInternal,
+                finalRepartitionTableName,
+                rangeScannableDBRef.name(),
+                materialized,
+                outputProcessorParameters,
+                this.name,
+                ((KTableImpl<?, ?, ?>) other).name,
+                ((KTableImpl<?, ?, ?>) other).valueGetterSupplier().storeNames());
 
+        builder.addGraphNode(this.streamsGraphNode, outputNode);
 
         return new KTableImpl<>(builder, outputProcessorName, outputProcessor, thisKeySerde, joinedValueSerde,
                 Collections.singleton(finalRepartitionSourceName), materialized.storeName(), true, outputNode);
     }
-
 }
