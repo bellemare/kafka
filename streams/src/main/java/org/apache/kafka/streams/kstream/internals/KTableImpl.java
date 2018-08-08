@@ -768,7 +768,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 new MaterializedInternal<KL, Long, KeyValueStore<Bytes, byte[]>>(highwaterMat);
 
     //OptimizableRepartitionNode
-//        builder.internalTopologyBuilder.addInternalTopic(repartitionTopicName);
+        builder.internalTopologyBuilder.addInternalTopic(repartitionTopicName);
 //        builder.internalTopologyBuilder.addProcessor(repartitionProcessorName, repartitionProcessor, this.name);
 //        //Repartition to the KR prefix of the CombinedKey.
 //        builder.internalTopologyBuilder.addSink(repartitionSinkName, repartitionTopicName,
@@ -800,15 +800,16 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 joinOneToOne,
                 joinOneToOneName
         );
+
         StatefulProcessorNode.StatefulProcessorNodeBuilder<CombinedKey<KR,KL>,VL> oneToOneJoinBuilder = StatefulProcessorNode.statefulProcessorNodeBuilder();
-        StatefulProcessorNode mcNode = oneToOneJoinBuilder.withProcessorParameters(oneToOneJoinBuilderProcParams)
-                .withNodeName("OneToOneJoinNode")
+        StatefulProcessorNode oneToOneJoinNode = oneToOneJoinBuilder.withProcessorParameters(oneToOneJoinBuilderProcParams)
+                .withNodeName(joinOneToOneName)
                 .withStoreBuilder(new KeyValueStoreMaterializer<>(repartitionedRangeScannableStore).materialize())
                 .withStoreNames(((KTableImpl) other).valueGetterSupplier().storeNames())
                 .withRepartitionRequired(false)//TODO - Bellemare Do I need to change this?
                 .build();
 
-        builder.addGraphNode(stageOneRepartitionNode, mcNode);
+        builder.addGraphNode(stageOneRepartitionNode, oneToOneJoinNode);
 
     //Add StatefulProcessorNode
 //        builder.internalTopologyBuilder.addProcessor(joinOneToOneName, joinOneToOne, repartitionSourceName);
@@ -832,7 +833,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         StatefulProcessorNode.StatefulProcessorNodeBuilder<?,?> joinByPrefixBuilder = StatefulProcessorNode.statefulProcessorNodeBuilder();
         String[] joinByPrefixNodeStoreName = {rangeScannableDBRef.name()};
         StatefulProcessorNode joinByPrefixNode = joinByPrefixBuilder.withProcessorParameters(joinByRangeBuilderProcParams)
-                .withNodeName("JoinByPrefixNode")
+                .withNodeName(joinByPrefixName)
                 .withStoreBuilder(null)
                 .withStoreNames(joinByPrefixNodeStoreName)
                 .withRepartitionRequired(false)//TODO - Bellemare Do I need to change this?
@@ -843,16 +844,19 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         builder.internalTopologyBuilder.addInternalTopic(finalRepartitionTopicName);
         //Repartition back to the original partitioning structure
 
-        StreamSinkNode leftSink = new StreamSinkNode<>("leftSink",
+        StreamSinkNode joinedSink = new StreamSinkNode<>("joinedSink",
                 new StaticTopicNameExtractor(finalRepartitionTopicName),
                 new ProducedInternal(Produced.with(thisKeySerde, changedSerde)));
 
-        StreamSinkNode rightSink = new StreamSinkNode<>("rightSink",
-                new StaticTopicNameExtractor(finalRepartitionTopicName),
-                new ProducedInternal(Produced.with(thisKeySerde, changedSerde)));
+//        StreamSinkNode rightSink = new StreamSinkNode<>("rightSink",
+//                new StaticTopicNameExtractor(finalRepartitionTopicName),
+//                new ProducedInternal(Produced.with(thisKeySerde, changedSerde)));
+        HashSet<StreamsGraphNode> sinkPredecessors = new HashSet<>();
+        sinkPredecessors.add(oneToOneJoinNode);
+        sinkPredecessors.add(joinByPrefixNode);
 
-        builder.addGraphNode(mcNode, leftSink);
-        builder.addGraphNode(joinByPrefixNode, rightSink);
+        builder.addGraphNode(sinkPredecessors, joinedSink);
+
 //        builder.internalTopologyBuilder.addSink(finalRepartitionSinkName, finalRepartitionTopicName,
 //                thisKeySerde.serializer(), changedSerializer,
 //                null,
@@ -867,8 +871,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 //        builder.internalTopologyBuilder.addSource(null, finalRepartitionSourceName, new FailOnInvalidTimestamp(),
 //                thisKeySerde.deserializer(), changedDeserializer, finalRepartitionTopicName);
 
-        builder.addGraphNode(leftSink, sourceNode);
-        builder.addGraphNode(rightSink, sourceNode);
+        builder.addGraphNode(joinedSink, sourceNode);
 
 //    //StatefulProcessorNode
 //        //Connect highwaterProcessor to source, add the state store, and connect the statestore with the processor.
@@ -889,6 +892,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 .withRepartitionRequired(false) //TODO - Yay or Nay?
                 .withStoreBuilder(new KeyValueStoreMaterializer<>(highwaterMatInternal).materialize())
                 .withStoreNames(highwaterPredecessor)
+                .withNodeName(highwaterProcessorName)
                 .build();
 
         builder.addGraphNode(sourceNode, highwaterNode);
@@ -920,8 +924,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
 //    //END //
 
         final ProcessorParameters outputBuilderProcParams = new ProcessorParameters<>(
-                highwaterProcessor,
-                highwaterProcessorName
+                outputProcessor,
+                outputProcessorName
         );
         StatefulProcessorNode.StatefulProcessorNodeBuilder<?,?> outputBuilder = StatefulProcessorNode.statefulProcessorNodeBuilder();
 
@@ -931,13 +935,14 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 .withRepartitionRequired(false) //TODO - Yay or Nay?
                 .withStoreBuilder(new KeyValueStoreMaterializer<>(materialized).materialize())
                 .withStoreNames(outputPredecessor)
+                .withNodeName(outputProcessorName)
                 .build();
 
-        builder.addGraphNode(outputNode, highwaterNode); //TODO - Bellemare - set the correct parent node!
+        builder.addGraphNode(highwaterNode, outputNode);
 
 
         return new KTableImpl<>(builder, outputProcessorName, outputProcessor, thisKeySerde, joinedValueSerde,
-                Collections.singleton(finalRepartitionSourceName), materialized.storeName(), true, null);
+                Collections.singleton(finalRepartitionSourceName), materialized.storeName(), true, outputNode);
     }
 
 }

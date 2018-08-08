@@ -53,9 +53,7 @@ public class KTableKTableOneToManyJoinTest {
     private final String topic2 = "topic2";
     private final Serde<String> stringSerde = Serdes.String();
     private final Consumed<String, String> consumed = Consumed.with(stringSerde, stringSerde);
-
     private File stateDir = null;
-
     private static final String APP_ID = "app-id";
 
     @Rule
@@ -135,18 +133,15 @@ public class KTableKTableOneToManyJoinTest {
                             final MockProcessorSupplier<String, String> supplier,
                             final KTable<String, String> joined) {
 
-        //StreamsBuilderTest.internalTopologyBuilder(builder).setApplicationId(APP_ID);
-
-        final Collection<Set<String>> copartitionGroups = TopologyWrapper.getInternalTopologyBuilder(builder.build()).copartitionGroups();
-
-        assertEquals(1, copartitionGroups.size());
-
-        final MockProcessor<String, String> processor = supplier.theCapturedProcessor();
+        final Collection<Set<String>> copartitionGroups = TopologyWrapper.getInternalTopologyBuilder(builder.build()).setApplicationId(APP_ID).copartitionGroups();
+        assertEquals(2, copartitionGroups.size());
 
         final KTableValueGetterSupplier<String, String> getterSupplier = ((KTableImpl<String, String, String>) joined).valueGetterSupplier();
 
         driver.setUp(builder, stateDir, Serdes.String(), Serdes.String());
         driver.setTime(0L);
+
+        final MockProcessor<String, String> processor = supplier.theCapturedProcessor();
 
         final KTableValueGetter<String, String> getter = getterSupplier.get();
         getter.init(driver.context());

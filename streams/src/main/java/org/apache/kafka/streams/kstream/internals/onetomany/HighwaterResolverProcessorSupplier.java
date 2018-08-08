@@ -19,7 +19,6 @@ public class HighwaterResolverProcessorSupplier<KR, V>
         this.stateStoreName = stateStoreName;
     }
 
-
     @Override
     public Processor<KR, Change<PropagationWrapper<V>>> get()
     {

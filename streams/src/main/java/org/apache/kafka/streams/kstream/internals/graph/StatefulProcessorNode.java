@@ -59,13 +59,13 @@ public class StatefulProcessorNode<K, V> extends ProcessorGraphNode<K, V> {
         final ProcessorSupplier processorSupplier = processorParameters().processorSupplier();
 
         topologyBuilder.addProcessor(processorName, processorSupplier, parentNodeNames());
+        //TODO - Bellemare - I changed the order of the two if statements below. Is this correct?
+        if (storeBuilder != null) {
+            topologyBuilder.addStateStore(storeBuilder, processorName);
+        }
 
         if (storeNames != null && storeNames.length > 0) {
             topologyBuilder.connectProcessorAndStateStores(processorName, storeNames);
-        }
-
-        if (storeBuilder != null) {
-            topologyBuilder.addStateStore(storeBuilder, processorName);
         }
     }
 
