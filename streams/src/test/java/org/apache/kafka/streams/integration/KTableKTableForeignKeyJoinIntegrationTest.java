@@ -169,40 +169,43 @@ public class KTableKTableForeignKeyJoinIntegrationTest {
                 expectedResult.size());
 
         assertThat(result, equalTo(expectedResult));
-//
-//        //Now, try re-assigning the foreignKey
-//        final List<KeyValue<String, String>> table1 = Arrays.asList(
-//                new KeyValue<>("c", "2,C1")
-//        );
-//        final Properties producerConfig = new Properties();
-//        producerConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
-//        producerConfig.put(ProducerConfig.ACKS_CONFIG, "all");
-//        producerConfig.put(ProducerConfig.RETRIES_CONFIG, 0);
-//        producerConfig.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-//        producerConfig.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-//
-//        try {
-//            IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1, producerConfig, MOCK_TIME);
-//        } catch (Exception e) {
-//            System.out.println("I am not a clever man");
-//        }
-//
-//        final List<KeyValue<String, String>> resultTwo = IntegrationTestUtils.waitUntilMinKeyValueRecordsReceived(
-//                CONSUMER_CONFIG,
-//                OUTPUT,
-//                expectedResultTwo.size());
-//
+
+        //Now, try re-assigning the foreignKey
+        final List<KeyValue<String, String>> table1 = Arrays.asList(
+                new KeyValue<>("c", "2,C1")
+        );
+        final Properties producerConfig = new Properties();
+        producerConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
+        producerConfig.put(ProducerConfig.ACKS_CONFIG, "all");
+        producerConfig.put(ProducerConfig.RETRIES_CONFIG, 0);
+        producerConfig.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        producerConfig.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+
+        try {
+            IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1, producerConfig, MOCK_TIME);
+        } catch (Exception e) {
+            System.out.println("I am not a clever man");
+        }
+
+        final List<KeyValue<String, String>> resultTwo = IntegrationTestUtils.waitUntilMinKeyValueRecordsReceived(
+                CONSUMER_CONFIG,
+                OUTPUT,
+                expectedResultTwo.size());
+
 //        for (KeyValue<String, String> stringStringKeyValue : resultTwo) {
 //            System.out.println("Bellemare Test = " + stringStringKeyValue);
 //        }
-//
-//        System.out.println("Bellemare PreAssert");
-//
-//        assertThat(resultTwo, equalTo(expectedResultTwo));
-//        System.out.println("Bellemare PostAssert");
+        assertThat(resultTwo, equalTo(expectedResultTwo));
 
         if (verifyQueryableState) {
-            verifyKTableKTableJoinQueryableState(joinType1, joinType2, expectedResult);
+            List<KeyValue<String, String>> totalResults = new LinkedList<>();
+            for (KeyValue<String,String> elem : expectedResult) {
+                totalResults.add(elem);
+            }
+            for (KeyValue<String,String> elem : expectedResultTwo) {
+                totalResults.add(elem);
+            }
+            verifyKTableKTableJoinQueryableState(joinType1, joinType2, totalResults);
         }
     }
 
