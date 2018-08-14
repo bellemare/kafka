@@ -920,7 +920,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                                                                       final Serde<VL> thisValueSerde,
                                                                       final Serde<KR> otherKeySerde,
                                                                       final Serde<V0> joinedValueSerde) {
-
         ((KTableImpl<?, ?, ?>) other).enableSendingOldValues();
         enableSendingOldValues();
 
@@ -1027,18 +1026,13 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         builder.internalTopologyBuilder.connectProcessorAndStateStores(joinByRangeName, rangeScannableDBRef.name());
         builder.internalTopologyBuilder.connectProcessorAndStateStores(joinOneToOneName, ((KTableImpl) other).valueGetterSupplier().storeNames());
 
-
-        //Final output and input need to be partitioned identically.
-        final HashSet<String> stageOneAndOtherCopartition = new HashSet<>();
-        stageOneAndOtherCopartition.add(repartitionSourceName);
-        stageOneAndOtherCopartition.addAll(((KTableImpl<?, ?, ?>) other).sourceNodes);
-        builder.internalTopologyBuilder.copartitionSources(stageOneAndOtherCopartition);
-
-        final HashSet<String> outputAndThisCopartition = new HashSet<>();
-        outputAndThisCopartition.add(finalRepartitionerName);
-        outputAndThisCopartition.addAll(sourceNodes);
-        builder.internalTopologyBuilder.copartitionSources(outputAndThisCopartition);
-
+        //Inputs need to be copartitioned just to get the same partition count. This ensures we don't bottleneck.
+        Set<String> sourcesCopartition = new HashSet<>();
+        sourcesCopartition.add(repartitionSourceName);
+        sourcesCopartition.add(finalRepartitionSourceName);
+        sourcesCopartition.addAll(((KTableImpl<?, ?, ?>) other).sourceNodes);
+        sourcesCopartition.addAll(sourceNodes);
+        builder.internalTopologyBuilder.copartitionSources(sourcesCopartition);
 
         KTableSource outputProcessor = new KTableSource<K, V0>(materialized.storeName());
         final String outputProcessorName = builder.newProcessorName(SOURCE_NAME);
@@ -1050,8 +1044,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         builder.internalTopologyBuilder.addStateStore(storeBuilder, outputProcessorName);
         builder.internalTopologyBuilder.connectProcessorAndStateStores(outputProcessorName, storeBuilder.name());
 
-
         return new KTableImpl<>(builder, outputProcessorName, outputProcessor, thisKeySerde, joinedValueSerde,
-                Collections.singleton(finalRepartitionSourceName), materialized.storeName(), true);
+                sourcesCopartition/* Collections.singleton(finalRepartitionSourceName)*/, materialized.storeName(), true);
     }
 }
