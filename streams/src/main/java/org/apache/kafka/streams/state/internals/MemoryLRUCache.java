@@ -188,6 +188,14 @@ public class MemoryLRUCache<K, V> implements KeyValueStore<K, V> {
         throw new UnsupportedOperationException("MemoryLRUCache does not support all() function.");
     }
 
+    /**
+     * @throws UnsupportedOperationException
+     */
+    @Override
+    public KeyValueIterator<K, V> prefixScan(final K prefix) {
+        throw new UnsupportedOperationException("MemoryLRUCache does not support prefixScan() function.");
+    }
+
     @Override
     public long approximateNumEntries() {
         return this.map.size();

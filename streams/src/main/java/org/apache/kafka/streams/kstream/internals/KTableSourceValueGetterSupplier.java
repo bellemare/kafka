@@ -14,12 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.kafka.streams.kstream.internals;
 
 import org.apache.kafka.streams.processor.ProcessorContext;
+import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 
-public class KTableSourceValueGetterSupplier<K, V> implements KTableValueGetterSupplier<K, V> {
+public class KTableSourceValueGetterSupplier<K, V> implements KTablePrefixValueGetterSupplier<K, V> {
 
     private final String storeName;
 
@@ -27,7 +29,7 @@ public class KTableSourceValueGetterSupplier<K, V> implements KTableValueGetterS
         this.storeName = storeName;
     }
 
-    public KTableValueGetter<K, V> get() {
+    public KTablePrefixValueGetter<K, V> get() {
         return new KTableSourceValueGetter();
     }
 
@@ -36,7 +38,7 @@ public class KTableSourceValueGetterSupplier<K, V> implements KTableValueGetterS
         return new String[]{storeName};
     }
 
-    private class KTableSourceValueGetter implements KTableValueGetter<K, V> {
+    private class KTableSourceValueGetter implements KTablePrefixValueGetter<K, V> {
 
         ReadOnlyKeyValueStore<K, V> store = null;
 
@@ -51,6 +53,11 @@ public class KTableSourceValueGetterSupplier<K, V> implements KTableValueGetterS
 
         @Override
         public void close() {
+        }
+
+        @Override
+        public KeyValueIterator<K, V> prefixScan(final K prefix) {
+            return store.prefixScan(prefix);
         }
     }
 

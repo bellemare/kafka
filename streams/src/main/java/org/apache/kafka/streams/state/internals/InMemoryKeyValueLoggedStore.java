@@ -130,4 +130,9 @@ public class InMemoryKeyValueLoggedStore<K, V> extends WrappedStateStore.Abstrac
     public KeyValueIterator<K, V> all() {
         return this.inner.all();
     }
+
+    @Override
+    public KeyValueIterator<K, V> prefixScan(final K prefix) {
+        return this.inner.prefixScan(prefix);
+    }
 }
