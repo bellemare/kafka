@@ -41,22 +41,17 @@ class CombinedKeyDeserializer<KF, KP> implements Deserializer<CombinedKey<KF, KP
 
     @Override
     public CombinedKey<KF, KP> deserialize(final String topic, final byte[] data) {
-        //{4-byte foreignKeyLength}{foreignKeySerialized}{4-bytePrimaryKeyLength}{primaryKeySerialized}
-
-        final byte[] fkCount = Arrays.copyOfRange(data, 0, 4);
-        final int foreignKeyLength = fourBytesToInt(fkCount);
-        final byte[] foreignKeyRaw = Arrays.copyOfRange(data, 4, 4 + foreignKeyLength);
-
+        ByteBuffer buf = ByteBuffer.wrap(data);
+        int foreignKeyLength = buf.getInt();
+        byte[] foreignKeyRaw = new byte[foreignKeyLength];
+        buf.get(foreignKeyRaw, 0, foreignKeyLength);
         final KF foreignKey = foreignKeyDeserializer.deserialize(topic, foreignKeyRaw);
 
         if (data.length == 4 + foreignKeyLength) {
             return new CombinedKey<>(foreignKey);
         } else {
-
-            final byte[] primaryCount = Arrays.copyOfRange(data, 4 + foreignKeyLength, 4 + foreignKeyLength + 4);
-            final int primaryKeyLength = fourBytesToInt(primaryCount);
-
-            final byte[] primaryKeyRaw = Arrays.copyOfRange(data, 4 + foreignKeyLength + 4, 4 + foreignKeyLength + 4 + primaryKeyLength);
+            byte[] primaryKeyRaw = new byte[data.length - foreignKeyLength - 4];
+            buf.get(primaryKeyRaw, 0, primaryKeyRaw.length);
             final KP primaryKey = primaryKeyDeserializer.deserialize(topic, primaryKeyRaw);
             return new CombinedKey<>(foreignKey, primaryKey);
         }

@@ -27,10 +27,11 @@ import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetterSupplie
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
+import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.state.KeyValueIterator;
 
-public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> extends BaseForeignKeyJoinProcessorSupplier<KO, Change<VO>> {
+public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSupplier<KO, Change<VO>> {
     private final ValueJoiner<V, VO, VR> joiner;
     private final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> primary;
     private final StateStore ref;
@@ -90,9 +91,9 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> extends BaseForeignKey
                 if (change.newValue != null) {
                     newValue = joiner.apply(value2, change.newValue);
                 }
-                //Using -1 because we will not have race conditions from this side of the join to disambiguate with source offset.
-                context().headers().remove(offset);
-                context().headers().add(offset, negativeOneLong);
+                //Using -1 because we will not have race conditions from this side of the join to disambiguate with source OFFSET.
+                context().headers().remove(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString());
+                context().headers().add(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString(), negativeOneLong);
                 context().forward(realKey, newValue);
             }
         }
