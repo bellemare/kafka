@@ -26,10 +26,11 @@ import org.apache.kafka.streams.kstream.internals.KTableValueGetterSupplier;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
+import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
 
 public class ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO, VR>
-        extends BaseForeignKeyJoinProcessorSupplier<CombinedKey<KO, K>, V> {
+        implements ProcessorSupplier<CombinedKey<KO, K>, V> {
 
     private final String topicName;
     private final KTableValueGetterSupplier<KO, VO> foreignValueGetterSupplier;
@@ -62,7 +63,7 @@ public class ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO, VR>
             @Override
             public void process(final CombinedKey<KO, K> key, final V value) {
                 final Headers readHead = context().headers();
-                final byte[] propagateBytes = readHead.lastHeader(propagate).value();
+                final byte[] propagateBytes = readHead.lastHeader(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString()).value();
                 final boolean propagate = propagateBytes[0] == 1;
 
                 //We don't want to propagate a null due to a foreign-key change past this point.

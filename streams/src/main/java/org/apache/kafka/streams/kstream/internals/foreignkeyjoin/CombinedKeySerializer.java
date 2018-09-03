@@ -39,8 +39,7 @@ class CombinedKeySerializer<KF, KP> implements Serializer<CombinedKey<KF, KP>> {
 
     @Override
     public byte[] serialize(final String topic, final CombinedKey<KF, KP> data) {
-        //{4-byte foreignKeyLength}{foreignKeySerialized}{4-bytePrimaryKeyLength}{primaryKeySerialized}
-
+        //{4-byte foreignKeyLength}{foreignKeySerialized}{primaryKeySerialized}
         //? bytes
         final byte[] foreignKeySerializedData = foreignKeySerializer.serialize(topic, data.getForeignKey());
         //4 bytes
@@ -49,19 +48,17 @@ class CombinedKeySerializer<KF, KP> implements Serializer<CombinedKey<KF, KP>> {
         if (data.getPrimaryKey() != null) {
             //? bytes
             final byte[] primaryKeySerializedData = primaryKeySerializer.serialize(topic, data.getPrimaryKey());
-            //4 bytes
-            final byte[] primaryKeyByteSize = numToBytes(primaryKeySerializedData.length);
-            final byte[] total = new byte[8 + foreignKeySerializedData.length + primaryKeySerializedData.length];
-            System.arraycopy(foreignKeyByteSize, 0, total, 0, 4);
-            System.arraycopy(foreignKeySerializedData, 0, total, 4, foreignKeySerializedData.length);
-            System.arraycopy(primaryKeyByteSize, 0, total, 4 + foreignKeySerializedData.length, 4);
-            System.arraycopy(primaryKeySerializedData, 0, total, 8 + foreignKeySerializedData.length, primaryKeySerializedData.length);
-            return total;
+
+            ByteBuffer buf = ByteBuffer.allocate(4 + foreignKeySerializedData.length + primaryKeySerializedData.length);
+            buf.put(foreignKeyByteSize);
+            buf.put(foreignKeySerializedData);
+            buf.put(primaryKeySerializedData);
+            return buf.array();
         } else {
-            final byte[] total = new byte[4 + foreignKeySerializedData.length];
-            System.arraycopy(foreignKeyByteSize, 0, total, 0, 4);
-            System.arraycopy(foreignKeySerializedData, 0, total, 4, foreignKeySerializedData.length);
-            return total;
+            ByteBuffer buf = ByteBuffer.allocate(4 + foreignKeySerializedData.length);
+            buf.put(foreignKeyByteSize);
+            buf.put(foreignKeySerializedData);
+            return buf.array();
         }
     }
 

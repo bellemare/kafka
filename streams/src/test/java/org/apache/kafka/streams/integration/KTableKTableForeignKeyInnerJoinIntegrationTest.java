@@ -19,6 +19,8 @@ package org.apache.kafka.streams.integration;
 import kafka.utils.MockTime;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.header.internals.RecordHeader;
+import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.apache.kafka.common.serialization.FloatSerializer;
 import org.apache.kafka.common.serialization.IntegerDeserializer;
 import org.apache.kafka.common.serialization.IntegerSerializer;
@@ -37,8 +39,10 @@ import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.kstream.Serialized;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.ForeignKeyJoinInternalHeaderTypes;
 import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.QueryableStoreTypes;
@@ -219,7 +223,12 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         producerConfig.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, IntegerSerializer.class);
         producerConfig.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, FloatSerializer.class);
 
-        IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1ForeignKeyChange, producerConfig, MOCK_TIME);
+        //Deliberately use the internal headers to try to screw up the code.
+        RecordHeaders userRecordHeaders = new RecordHeaders();
+        userRecordHeaders.add(new RecordHeader(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString(), new byte[]{0x0}));
+        userRecordHeaders.add(new RecordHeader(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString(), new byte[]{0x0}));
+
+        IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1ForeignKeyChange, producerConfig, userRecordHeaders, MOCK_TIME);
 
         //Worst case scenario is that every event update gets propagated to the output.
         //Realistically we just need to wait until every update is sent, and so a conservative 15s timeout has been
@@ -329,8 +338,12 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
             }
         };
 
+        Serialized<Integer, Float> thisSerialized = Serialized.with(Serdes.Integer(), Serdes.Float());
+        Serialized<String, Long> otherSerialized = Serialized.with(Serdes.String(), Serdes.Long());
+        Serialized<Integer, String> joinedSerialized = Serialized.with(Serdes.Integer(), Serdes.String());
+
         table1.joinOnForeignKey(table2, tableOneKeyExtractor, joiner, materialized,
-                Serdes.Integer(), Serdes.Float(), Serdes.String(), Serdes.String())
+                thisSerialized, otherSerialized, joinedSerialized)
             .toStream()
             .to(OUTPUT, Produced.with(Serdes.Integer(), Serdes.String()));
 

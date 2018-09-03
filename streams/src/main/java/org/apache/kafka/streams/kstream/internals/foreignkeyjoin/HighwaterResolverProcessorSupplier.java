@@ -22,9 +22,12 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
+import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
 
-public class HighwaterResolverProcessorSupplier<K, VR> extends BaseForeignKeyJoinProcessorSupplier<K, VR> {
+import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.UserRecordHeaderIsolatorUtil.removeUserHeaderPrefix;
+
+public class HighwaterResolverProcessorSupplier<K, VR> implements ProcessorSupplier<K, VR> {
     private final String stateStoreName;
 
     public HighwaterResolverProcessorSupplier(final String stateStoreName) {
@@ -52,12 +55,13 @@ public class HighwaterResolverProcessorSupplier<K, VR> extends BaseForeignKeyJoi
                 //highwater = x, value(offset = x-1, null)      => Do not send, it is an out-of-order, old update.
                 //highwater = x, value(offset = x-1, non-null)  => Do not send, it is an out-of-order, old update.
 
-                final byte[] offsetHeader = context().headers().lastHeader(offset).value();
+                final byte[] offsetHeader = context().headers().lastHeader(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString()).value();
                 final Long offset = longSerde.deserialize(null, offsetHeader);
                 final Long highwater = offsetHighWaterStore.get(key);
 
-                context().headers().remove(HighwaterResolverProcessorSupplier.this.offset);
-                context().headers().remove(propagate);
+                context().headers().remove(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString());
+                context().headers().remove(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString());
+                removeUserHeaderPrefix(context());
                 if (null == highwater || offset >= highwater) {
                     // using greater-than to capture new highwater events.
                     // using equal as we want to resend in the case of a node failure.

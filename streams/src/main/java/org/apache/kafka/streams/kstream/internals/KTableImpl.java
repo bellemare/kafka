@@ -665,26 +665,24 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                                                        final ValueJoiner<V, VO, VR> joiner,
                                                        final Materialized<K, VR, KeyValueStore<Bytes, byte[]>> materialized,
                                                        final StreamPartitioner<KO, ?> foreignKeyPartitioner,
-                                                       final Serde<K> thisKeySerde,
-                                                       final Serde<V> thisValueSerde,
-                                                       final Serde<KO> otherKeySerde,
-                                                       final Serde<VR> joinedValueSerde) {
+                                                       final Serialized<K, V> thisSerialized,
+                                                       final Serialized<KO, VO> otherSerialized,
+                                                       final Serialized<K, VR> joinedSerialized) {
 
         return doJoinOnForeignKey(other, keyExtractor, joiner, new MaterializedInternal<>(materialized),
-                foreignKeyPartitioner, thisKeySerde, thisValueSerde, otherKeySerde, joinedValueSerde);
+                foreignKeyPartitioner, thisSerialized, otherSerialized, joinedSerialized);
     }
 
     public <VR, KO, VO> KTable<K, VR> joinOnForeignKey(final KTable<KO, VO> other,
                                                        final ValueMapper<V, KO> keyExtractor,
                                                        final ValueJoiner<V, VO, VR> joiner,
                                                        final Materialized<K, VR, KeyValueStore<Bytes, byte[]>> materialized,
-                                                       final Serde<K> thisKeySerde,
-                                                       final Serde<V> thisValueSerde,
-                                                       final Serde<KO> otherKeySerde,
-                                                       final Serde<VR> joinedValueSerde) {
+                                                       final Serialized<K, V> thisSerialized,
+                                                       final Serialized<KO, VO> otherSerialized,
+                                                       final Serialized<K, VR> joinedSerialized) {
 
         return doJoinOnForeignKey(other, keyExtractor, joiner, new MaterializedInternal<>(materialized),
-                null, thisKeySerde, thisValueSerde, otherKeySerde, joinedValueSerde);
+                null, thisSerialized, otherSerialized, joinedSerialized);
     }
 
     @SuppressWarnings("unchecked")
@@ -693,10 +691,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                                                           final ValueJoiner<V, VO, VR> joiner,
                                                           final MaterializedInternal<K, VR, KeyValueStore<Bytes, byte[]>> materialized,
                                                           final StreamPartitioner<KO, ?> foreignKeyPartitioner,
-                                                          final Serde<K> thisKeySerde,
-                                                          final Serde<V> thisValueSerde,
-                                                          final Serde<KO> otherKeySerde,
-                                                          final Serde<VR> joinedValueSerde) {
+                                                          final Serialized<K, V> thisSerialized,
+                                                          final Serialized<KO, VO> otherSerialized,
+                                                          final Serialized<K, VR> joinedSerialized) {
         Objects.requireNonNull(other, "other can't be null");
         Objects.requireNonNull(keyExtractor, "keyExtractor can't be null");
         Objects.requireNonNull(joiner, "joiner can't be null");
@@ -707,10 +704,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 joiner,
                 materialized,
                 foreignKeyPartitioner,
-                thisKeySerde,
-                thisValueSerde,
-                otherKeySerde,
-                joinedValueSerde);
+                new SerializedInternal<>(thisSerialized),
+                new SerializedInternal<>(otherSerialized),
+                new SerializedInternal<>(joinedSerialized));
 
         return result;
     }
@@ -720,10 +716,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                                                              final ValueJoiner<V, VO, VR> joiner,
                                                              final MaterializedInternal<K, VR, KeyValueStore<Bytes, byte[]>> materialized,
                                                              final StreamPartitioner<KO, ?> foreignKeyPartitioner,
-                                                             final Serde<K> thisKeySerde,
-                                                             final Serde<V> thisValueSerde,
-                                                             final Serde<KO> otherKeySerde,
-                                                             final Serde<VR> joinedValueSerde) {
+                                                             final SerializedInternal<K, V> thisSerialized,
+                                                             final SerializedInternal<KO, VO> otherSerialized,
+                                                             final SerializedInternal<K, VR> joinedSerialized) {
 
         ((KTableImpl<?, ?, ?>) other).enableSendingOldValues();
         enableSendingOldValues();
@@ -739,7 +734,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final KTableRepartitionerProcessorSupplier<K, KO, V> repartitionProcessor =
                 new KTableRepartitionerProcessorSupplier<>(keyExtractor);
 
-        final CombinedKeySerde<KO, K> combinedKeySerde = new CombinedKeySerde<>(otherKeySerde, thisKeySerde);
+        final CombinedKeySerde<KO, K> combinedKeySerde = new CombinedKeySerde<>(otherSerialized.keySerde(), thisSerialized.keySerde());
 
         //Create the partitioner that will partition CombinedKey on just the foreign portion (right) of the combinedKey.
         final CombinedKeyByForeignKeyPartitioner<KO, K, V> partitioner;
@@ -765,7 +760,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 //No easy way to flush cache prior to prefixScan, so caching is disabled on this store.
                 .withCachingDisabled()
                 .withKeySerde(combinedKeySerde)
-                .withValueSerde(thisValueSerde);
+                .withValueSerde(thisSerialized.valueSerde());
         final MaterializedInternal<CombinedKey<KO, K>, V, KeyValueStore<Bytes, byte[]>> repartitionedPrefixScannableStore =
                 new MaterializedInternal<CombinedKey<KO, K>, V, KeyValueStore<Bytes, byte[]>>(foreignMaterialized);
 
@@ -788,7 +783,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
 
         final KeyValueBytesStoreSupplier highwaterRdbs = new RocksDbKeyValueBytesStoreSupplier(finalRepartitionTableName);
         final Materialized highwaterMat = Materialized.<K, Long, KeyValueStore<Bytes, byte[]>>as(highwaterRdbs.get().name())
-                .withKeySerde(thisKeySerde)
+                .withKeySerde(thisSerialized.keySerde())
                 .withValueSerde(Serdes.Long());
         final MaterializedInternal<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMatInternal =
                 new MaterializedInternal<K, Long, KeyValueStore<Bytes, byte[]>>(highwaterMat);
@@ -836,15 +831,15 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 repartitionProcessorParameters,
                 joinOneToOneProcessorParameters,
                 combinedKeySerde,
-                thisValueSerde,
+                thisSerialized.valueSerde(),
                 partitioner,
                 repartitionedPrefixScannableStore,
                 joinByPrefixProcessorParameters,
                 finalRepartitionTopicName,
                 finalRepartitionSinkName,
                 finalRepartitionSourceName,
-                thisKeySerde,
-                joinedValueSerde,
+                thisSerialized.keySerde(),
+                joinedSerialized.valueSerde(),
                 highwaterProcessorParameters,
                 highwaterMatInternal,
                 finalRepartitionTableName,
@@ -856,8 +851,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 ((KTableImpl<?, ?, ?>) other).valueGetterSupplier().storeNames());
 
         builder.addGraphNode(this.streamsGraphNode, outputNode);
-
-        return new KTableImpl<>(outputProcessorName, thisKeySerde, joinedValueSerde, Collections.singleton(finalRepartitionSourceName),
+        
+        return new KTableImpl<>(outputProcessorName, thisSerialized.keySerde(), joinedSerialized.valueSerde(), Collections.singleton(finalRepartitionSourceName),
                 materialized.storeName(), true, outputProcessor, outputNode, builder);
     }
 }

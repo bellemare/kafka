@@ -1150,10 +1150,9 @@ public interface KTable<K, V> {
      * @param keyExtractor extracts the key (KO) from this table's value (V).
      * @param joiner specifies how to join the records from both tables
      * @param materialized the materialized output store
-     * @param thisKeySerde the serde for K
-     * @param thisValueSerde the serde for V
-     * @param otherKeySerde the serde for KO
-     * @param joinedValueSerde the serde for the output value, VR
+     * @param thisSerialized the {@link Serialized} instance used to specify {@link org.apache.kafka.common.serialization.Serdes} for this KTable
+     * @param otherSerialized the {@link Serialized} instance used to specify {@link org.apache.kafka.common.serialization.Serdes} for the other KTable
+     * @param joinedSerialized the {@link Serialized} instance used to specify {@link org.apache.kafka.common.serialization.Serdes} for the resultant joined KTable
      * @param <VR> the value type of the result {@code KTable}
      * @param <KO> the key type of the other {@code KTable}
      * @param <VO> the value type of the other {@code KTable}
@@ -1163,24 +1162,23 @@ public interface KTable<K, V> {
                                                 final ValueMapper<V, KO> keyExtractor,
                                                 final ValueJoiner<V, VO, VR> joiner,
                                                 final Materialized<K, VR, KeyValueStore<Bytes, byte[]>> materialized,
-                                                final Serde<K> thisKeySerde,
-                                                final Serde<V> thisValueSerde,
-                                                final Serde<KO> otherKeySerde,
-                                                final Serde<VR> joinedValueSerde);
+                                                final Serialized<K, V> thisSerialized,
+                                                final Serialized<KO, VO> otherSerialized,
+                                                final Serialized<K, VR> joinedSerialized);
+
     /**
      * Joins the records of this KTable to another table keyed on a different key. Updates from this table will join
      * 1 to 1 on the other table. Updates to the other table will induce a join on each record in this table that has
      * that specific foreign key.
      *
-     * @param other the table containing the records to be joined on. Keyed by KO.
-     * @param keyExtractor extracts the key (KO) from this table's value (V).
+     * @param other the table containing the records to be joined on. Keyed by KO
+     * @param keyExtractor extracts the key (KO) from this table's value (V)
      * @param joiner specifies how to join the records from both tables
      * @param materialized the materialized output store
-     * @param foreignKeyPartitioner the partitioner that the other {@code KTable} uses to partition its data.
-     * @param thisKeySerde the serde for K
-     * @param thisValueSerde the serde for V
-     * @param otherKeySerde the serde for KO
-     * @param joinedValueSerde the serde for the output value, VR
+     * @param foreignKeyPartitioner the partitioner that the other {@code KTable} uses to partition its data
+     * @param thisSerialized the {@link Serialized} instance used to specify {@link org.apache.kafka.common.serialization.Serdes} for this KTable
+     * @param otherSerialized the {@link Serialized} instance used to specify {@link org.apache.kafka.common.serialization.Serdes} for the other KTable
+     * @param joinedSerialized the {@link Serialized} instance used to specify {@link org.apache.kafka.common.serialization.Serdes} for the resultant joined KTable
      * @param <VR> the value type of the result {@code KTable}
      * @param <KO> the key type of the other {@code KTable}
      * @param <VO> the value type of the other {@code KTable}
@@ -1191,10 +1189,9 @@ public interface KTable<K, V> {
                                                 final ValueJoiner<V, VO, VR> joiner,
                                                 final Materialized<K, VR, KeyValueStore<Bytes, byte[]>> materialized,
                                                 final StreamPartitioner<KO, ?> foreignKeyPartitioner,
-                                                final Serde<K> thisKeySerde,
-                                                final Serde<V> thisValueSerde,
-                                                final Serde<KO> otherKeySerde,
-                                                final Serde<VR> joinedValueSerde);
+                                                final Serialized<K, V> thisSerialized,
+                                                final Serialized<KO, VO> otherSerialized,
+                                                final Serialized<K, VR> joinedSerialized);
 
     /**
      * Get the name of the local state store used that can be used to query this {@code KTable}.
