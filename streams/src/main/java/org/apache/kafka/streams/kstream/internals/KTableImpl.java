@@ -49,8 +49,11 @@ import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.state.KeyValueBytesStoreSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.state.StoreBuilder;
+import org.apache.kafka.streams.state.Stores;
 import org.apache.kafka.streams.state.internals.RocksDbKeyValueBytesStoreSupplier;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
@@ -729,8 +732,16 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         final HighwaterResolverProcessorSupplier<K, VR> highwaterProcessor = new HighwaterResolverProcessorSupplier<>(finalRepartitionTableName);
         final String highwaterProcessorName = builder.newProcessorName(KTableImpl.SOURCE_NAME);
 
-        final KeyValueBytesStoreSupplier highwaterRdbs = new RocksDbKeyValueBytesStoreSupplier(finalRepartitionTableName);
-        final Materialized highwaterMat = Materialized.<K, Long, KeyValueStore<Bytes, byte[]>>as(highwaterRdbs.get().name())
+        // This will create a two-segment hopping window. Will maintain highwater mark for minimum of 12h, max 24h.
+        final long retentionPeriod = Duration.ofDays(1).toMillis();
+        final long windowSize = retentionPeriod;
+        final long segmentInterval = retentionPeriod;
+        final StoreBuilder hwsb = Stores.windowStoreBuilder(
+            Stores.persistentWindowStore(finalRepartitionTableName, retentionPeriod, windowSize, false, segmentInterval),
+                thisSerialized.keySerde(),
+                Serdes.Long());
+
+        final Materialized highwaterMat = Materialized.<K, Long, KeyValueStore<Bytes, byte[]>>as(hwsb.build().name())
                 .withKeySerde(thisSerialized.keySerde())
                 .withValueSerde(Serdes.Long());
         final MaterializedInternal<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMatInternal =
