@@ -40,6 +40,7 @@ import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.ForeignKeySingl
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.HighwaterResolverProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableKTablePrefixScanJoin;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableRepartitionerProcessorSupplier;
+import org.apache.kafka.streams.kstream.internals.graph.GroupedTableOperationRepartitionNode;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableForeignKeyJoinNode;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableForeignKeyJoinResolutionNode;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableJoinNode;
@@ -773,7 +774,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 repartitionProcessorName
         );
 
-        final ProcessorParameters joinOneToOneProcessorParameters = new ProcessorParameters<>(
+        final ProcessorParameters<CombinedKey<KO, K>, V> joinOneToOneProcessorParameters = new ProcessorParameters<>(
                 joinOneToOne,
                 joinOneToOneName
         );
@@ -799,9 +800,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
         //HighwaterResolutionNode
         //KTableNode
 
-        //String testNode1Name = builder.newProcessorName("testNode1-name");
+        //String testNode1Name = builder.newProcessorName("repartitionNode-name");
 
-        final OptimizableRepartitionNode testNode1 = new OptimizableRepartitionNode<>(repartitionSourceName,
+        final OptimizableRepartitionNode repartitionNode = new OptimizableRepartitionNode<>(repartitionSourceName,
                 repartitionSourceName,
                 repartitionProcessorParameters,
                 combinedKeySerde,
@@ -810,10 +811,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 repartitionTopicName,
                 partitioner);
 
-        //Invalid topology: Predecessor processor testNode1-name is not added yet for KTABLE-REPARTITION-0000000006bellemareName-TABLE
-        //Invalid topology: Predecessor processor testNode1-name is not added yet for KTABLE-REPARTITION-0000000006bellemareName-TABLE
-
-
+        //Invalid topology: Predecessor processor repartitionNode-name is not added yet for KTABLE-REPARTITION-0000000006bellemareName-TABLE
+        //Invalid topology: Predecessor processor repartitionNode-name is not added yet for KTABLE-REPARTITION-0000000006bellemareName-TABLE
+        
 /*
 public StatefulProcessorNode(final String nodeName,
                              final ProcessorParameters processorParameters,
@@ -822,95 +822,88 @@ public StatefulProcessorNode(final String nodeName,
                              final boolean repartitionRequired) {
  */
 
-        StoreBuilder sb = new KeyValueStoreMaterializer<>(repartitionedPrefixScannableStore).materialize();
+        StoreBuilder prefixScanStoreBuilder = new KeyValueStoreMaterializer<>(repartitionedPrefixScannableStore).materialize();
         final StatefulProcessorNode oneToOneNode = new StatefulProcessorNode(
-                "oneToOneNodeName",
+                joinOneToOneProcessorParameters.processorName(),
                 joinOneToOneProcessorParameters,
                 ((KTableImpl<?, ?, ?>) other).valueGetterSupplier().storeNames(),
-                sb,
+                prefixScanStoreBuilder,
                 false
         );
 
         final StatefulProcessorNode oneToManyNode = new StatefulProcessorNode(
-                "oneToManyNode",
+                joinByPrefixProcessorParameters.processorName(),
                 joinByPrefixProcessorParameters,
-                new String[]{sb.name()},
+                new String[]{prefixScanStoreBuilder.name()},
                 null,
                 false
         );
 
-//        TopicNameExtractor<K, VR> tne = ((key, value, recordContext) -> finalRepartitionSinkName);
-//        internalTopologyBuilder().addInternalTopic(finalRepartitionSinkName);
-//
-//        final StreamSinkNode oneToOneSink = new StreamSinkNode<>(
-//                "oneToOneSinkNode",
-//                tne,
-//                new ProducedInternal(Produced.with(thisSerialized.keySerde(), joinedSerialized.valueSerde()))
-//        );
-//
-//
-//        final StreamSinkNode oneToManySink = new StreamSinkNode<>(
-//                "oneToManySinkNode",
-//                tne,
-//                new ProducedInternal(Produced.with(thisSerialized.keySerde(), joinedSerialized.valueSerde()))
-//        );
-
-
         final KTableKTableForeignKeyJoinNode outputNode = new KTableKTableForeignKeyJoinNode<>(
                 "outputNode-name",
-                //outputProcessorName,
-                repartitionSourceName,
                 joinOneToOneProcessorParameters,
-                combinedKeySerde,
-                thisSerialized.valueSerde(),
-                repartitionedPrefixScannableStore,
                 joinByPrefixProcessorParameters,
                 finalRepartitionTopicName,
                 finalRepartitionSinkName,
-                thisSerialized.keySerde(),
-                joinedSerialized.valueSerde(),
-                ((KTableImpl<?, ?, ?>) other).name,
-                prefixScannableDBRef.name(),
-                ((KTableImpl<?, ?, ?>) other).valueGetterSupplier().storeNames()
-                );
-
-//        final ConsumedInternal<K,V> internal = new ConsumedInternal<K,V>(keySerde, valSerde,
-//                new UsePreviousTimeOnInvalidTimestamp(),
-//                Topology.AutoOffsetReset.EARLIEST);
-//        //If the offset it lost, it will still rebuild eventually to the correct data,
-//        //though there are probably bigger problems at that point.
-//
-//        StreamSourceNode ssNode = new StreamSourceNode<>(
-//                "nodeName",
-//                Collections.singletonList(finalRepartitionTopicName),
-//                internal);
-//
-//        String[] sourceTopics = ((KTableImpl<?, ?, ?>) other).valueGetterSupplier().storeNames();
-//        String[] sourceNames = new String[sourceTopics.length+1];
-//
-//        //TODO - Make this nicer
-//        for (int i = 0; i < sourceTopics.length; i++){
-//            sourceNames[i] = sourceTopics[i];
-//        }
-//        sourceNames[sourceNames.length-1] = prefixScannableDBRef.name();
-//
-//        //TODO - What's the difference between this and TableProcessorNode?
-//        StatefulProcessorNode spn = new StatefulProcessorNode<K,VR>(
-//                "statefulNodeName",
-//                highwaterProcessorParameters,
-//                sourceNames,
-//                hwsb,
-//                false
-//        );
-//
-        final KTableKTableForeignKeyJoinResolutionNode outputNode2 = new KTableKTableForeignKeyJoinResolutionNode<>(
-                outputProcessorName, //TODO - Why does reusing this name work?
-                joinOneToOneProcessorParameters,
-                joinByPrefixProcessorParameters,
-                finalRepartitionTopicName,
                 finalRepartitionSourceName,
                 thisSerialized.keySerde(),
-                joinedSerialized.valueSerde(),
+                joinedSerialized.valueSerde()
+                );
+
+
+        //TODO - This forwards, but I think that we may need to change the processors around..
+        //TODO - I do not know if this following works. Going around it for now.
+        /*
+Caused by: org.apache.kafka.streams.errors.StreamsException: A serializer (key: org.apache.kafka.common.serialization.IntegerSerializer / value: org.apache.kafka.streams.kstream.internals.ChangedSerializer) is not compatible to the actual key or value type (key type: java.lang.Integer / value type: java.lang.String). Change the default Serdes in StreamConfig or provide correct Serdes via method parameters.
+	at org.apache.kafka.streams.processor.internals.SinkNode.process(SinkNode.java:94)
+	at org.apache.kafka.streams.processor.internals.ProcessorContextImpl.forward(ProcessorContextImpl.java:144)
+	at org.apache.kafka.streams.processor.internals.ProcessorContextImpl.forward(ProcessorContextImpl.java:127)
+	at org.apache.kafka.streams.processor.internals.ProcessorContextImpl.forward(ProcessorContextImpl.java:91)
+	at org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableKTablePrefixScanJoin$KTableKTableJoinProcessor.process(KTableKTablePrefixScanJoin.java:97)
+         */
+//        GroupedTableOperationRepartitionNode<K, VR> gtorn =
+//                GroupedTableOperationRepartitionNode.groupedTableOperationNodeBuilder()
+//                    .withKeySerde(thisSerialized.keySerde())
+//                    .withValueSerde(joinedSerialized.valueSerde())
+//                    .withSinkName(finalRepartitionSinkName)
+//                    .withSourceName(finalRepartitionSourceName)
+//                    .withRepartitionTopic(finalRepartitionTopicName)
+//                    .withProcessorParameters(null)
+//                    .withNodeName("someNodeName")
+//                    .build();
+        //GroupedTableOperationRepartitionNode
+        //addInternalTopic
+        //addSink
+        //addSource
+
+//public StatefulProcessorNode(final String nodeName,
+//        final ProcessorParameters processorParameters,
+//        final String[] storeNames,
+//        final StoreBuilder<? extends StateStore> materializedKTableStoreBuilder,
+//        final boolean repartitionRequired) {
+
+
+//        final TableProcessorNode highwaterNode = new TableProcessorNode(
+//                highwaterProcessorParameters.processorName(),
+//                highwaterProcessorParameters,
+//                highwaterMatInternal,
+//                new String[]{prefixScanStoreBuilder.name()}
+//        );
+
+
+        //StatefulProcessorNode
+        //addProcessor
+        //addStateStore
+        //connectStateStoreAndProcessor
+
+        //StatefulProcessorNode or TableProcessorNode ?
+        //addProcessor
+        //addStateStore
+        //connectStateStoreAndProcessor
+
+        final KTableKTableForeignKeyJoinResolutionNode outputNode2 = new KTableKTableForeignKeyJoinResolutionNode<>(
+                outputProcessorName, //TODO - Why does reusing this name work?
+                finalRepartitionSourceName,
                 highwaterProcessorParameters,
                 highwaterMatInternal,
                 finalRepartitionTableName,
@@ -922,22 +915,23 @@ public StatefulProcessorNode(final String nodeName,
 //        builder.addGraphNode(this.streamsGraphNode, outputNode);
 //        builder.addGraphNode(outputNode, outputNode2);
 
-
-//        builder.addGraphNode(this.streamsGraphNode, testNode1);
-//        builder.addGraphNode(testNode1, outputNode);
+//        builder.addGraphNode(this.streamsGraphNode, repartitionNode);
+//        builder.addGraphNode(repartitionNode, outputNode);
 //        builder.addGraphNode(outputNode, outputNode2);
 
-
-        builder.addGraphNode(this.streamsGraphNode, testNode1);
-        builder.addGraphNode(testNode1, oneToOneNode);
+        builder.addGraphNode(this.streamsGraphNode, repartitionNode);
+        builder.addGraphNode(repartitionNode, oneToOneNode);
         builder.addGraphNode(((KTableImpl<?, ?, ?>) other).streamsGraphNode, oneToManyNode);
 
         Set<StreamsGraphNode> nodes = new HashSet<>(2);
         nodes.add(oneToManyNode);
         nodes.add(oneToOneNode);
+
+//        builder.addGraphNode(nodes, gtorn);
+//        builder.addGraphNode(gtorn, outputNode2);
+
         builder.addGraphNode(nodes, outputNode);
         builder.addGraphNode(outputNode, outputNode2);
-
 
         return new KTableImpl<>(builder, outputProcessorName, outputProcessor, thisSerialized.keySerde(), joinedSerialized.valueSerde(),
                 Collections.singleton(finalRepartitionSourceName), materialized.storeName(), true, outputNode2);
