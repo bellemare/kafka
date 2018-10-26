@@ -27,6 +27,7 @@ import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKeyByFo
 import org.apache.kafka.streams.processor.FailOnInvalidTimestamp;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
 import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.state.StoreBuilder;
 
 /**
  * Too much specific information to generalize so the Foreign Key KTable-KTable join requires a specific node.
@@ -104,21 +105,29 @@ public class KTableKTableForeignKeyJoinNode<VR, K, V, KO, VO> extends StreamsGra
 //                combinedKeySerde.deserializer(), thisValueSerde.deserializer(), repartitionTopicName);
 
 
+//
+//        topologyBuilder.addProcessor(joinOneToOneProcessorParameters.processorName(),
+//                joinOneToOneProcessorParameters.processorSupplier(),
+//                repartitionSourceName);
+//
+//        StoreBuilder sb = new KeyValueStoreMaterializer<>(repartitionedPrefixScannableStore).materialize();
+//
+//        //Connect the left processor with the state store. This allows the statestore to be populated.
+//        topologyBuilder.addStateStore(sb, joinOneToOneProcessorParameters.processorName());
+//        //Add the right processor to the topology.
+//        topologyBuilder.connectProcessorAndStateStores(joinOneToOneProcessorParameters.processorName(), otherValueGetterStoreNames);
+//
+//
+//
+//        topologyBuilder.addProcessor(joinByPrefixProcessorParameters.processorName(), joinByPrefixProcessorParameters.processorSupplier(), otherName);
+//        //Connect the first-stage processors to the source state stores.
+//        topologyBuilder.connectProcessorAndStateStores(joinByPrefixProcessorParameters.processorName(), /*prefixScannableDBRefName*/ sb.name());
 
-        topologyBuilder.addProcessor(joinOneToOneProcessorParameters.processorName(),
-                joinOneToOneProcessorParameters.processorSupplier(),
-                repartitionSourceName);
-
-        //Connect the left processor with the state store.
-        topologyBuilder.addStateStore(new KeyValueStoreMaterializer<>(repartitionedPrefixScannableStore).materialize(), joinOneToOneProcessorParameters.processorName());
-        //Add the right processor to the topology.
 
 
-        topologyBuilder.addProcessor(joinByPrefixProcessorParameters.processorName(), joinByPrefixProcessorParameters.processorSupplier(), otherName);
 
-        //Connect the first-stage processors to the source state stores.
-        topologyBuilder.connectProcessorAndStateStores(joinByPrefixProcessorParameters.processorName(), prefixScannableDBRefName);
-        topologyBuilder.connectProcessorAndStateStores(joinOneToOneProcessorParameters.processorName(), otherValueGetterStoreNames);
+
+
 
 
         topologyBuilder.addInternalTopic(finalRepartitionTopicName);

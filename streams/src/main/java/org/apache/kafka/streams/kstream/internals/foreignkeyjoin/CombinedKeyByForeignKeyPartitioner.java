@@ -29,15 +29,14 @@ public class CombinedKeyByForeignKeyPartitioner<KL, KR, V> implements StreamPart
 
     //Use the default partitioner
     public CombinedKeyByForeignKeyPartitioner(final CombinedKeySerde<KL, KR> keySerde, final String topic) {
-        this.keySerializer = keySerde.getForeignKeySerializer();
-        this.topic = topic;
+        this(keySerde, topic, null);
     }
 
     //Use a custom partitioner.
-    public CombinedKeyByForeignKeyPartitioner(final CombinedKeySerde<KL, KR> keySerde, final String topic, final StreamPartitioner<KL, ?> foo) {
+    public CombinedKeyByForeignKeyPartitioner(final CombinedKeySerde<KL, KR> keySerde, final String topic, final StreamPartitioner<KL, ?> streamPartitioner) {
         this.keySerializer = keySerde.getForeignKeySerializer();
         this.topic = topic;
-        this.streamPartitioner = foo;
+        this.streamPartitioner = streamPartitioner;
     }
 
     @Override
