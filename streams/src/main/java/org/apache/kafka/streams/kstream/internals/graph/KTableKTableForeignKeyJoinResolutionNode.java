@@ -18,6 +18,7 @@
 package org.apache.kafka.streams.kstream.internals.graph;
 
 import org.apache.kafka.common.utils.Bytes;
+import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.kstream.internals.KeyValueStoreMaterializer;
 import org.apache.kafka.streams.kstream.internals.MaterializedInternal;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
@@ -29,7 +30,7 @@ import org.apache.kafka.streams.state.StoreBuilder;
  */
 public class KTableKTableForeignKeyJoinResolutionNode<VR, K, KO, VO> extends StreamsGraphNode {
     private final String finalRepartitionSourceName;
-    private final ProcessorParameters<K, VR> highwaterProcessorParameters;
+    private final ProcessorParameters<K, Change<VR>> highwaterProcessorParameters;
     private final MaterializedInternal<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMatInternal;
     private final String finalRepartitionTableName;
     private final MaterializedInternal<K, VR, KeyValueStore<Bytes, byte[]>> materialized;
@@ -37,7 +38,7 @@ public class KTableKTableForeignKeyJoinResolutionNode<VR, K, KO, VO> extends Str
 
     public KTableKTableForeignKeyJoinResolutionNode(final String nodeName,
                                                     final String finalRepartitionSourceName,
-                                                    final ProcessorParameters<K, VR> highwaterProcessorParameters,
+                                                    final ProcessorParameters<K, Change<VR>> highwaterProcessorParameters,
                                                     final MaterializedInternal<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMatInternal,
                                                     final String finalRepartitionTableName,
                                                     final MaterializedInternal<K, VR, KeyValueStore<Bytes, byte[]>> materialized,

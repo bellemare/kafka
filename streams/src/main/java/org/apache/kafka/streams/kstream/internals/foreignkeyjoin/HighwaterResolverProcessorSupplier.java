@@ -19,6 +19,7 @@ package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
@@ -27,7 +28,7 @@ import org.apache.kafka.streams.state.KeyValueStore;
 
 import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.UserRecordHeaderIsolatorUtil.removeUserHeaderPrefix;
 
-public class HighwaterResolverProcessorSupplier<K, VR> implements ProcessorSupplier<K, VR> {
+public class HighwaterResolverProcessorSupplier<K, VR> implements ProcessorSupplier<K, Change<VR>> {
     private final String stateStoreName;
 
     public HighwaterResolverProcessorSupplier(final String stateStoreName) {
@@ -35,8 +36,8 @@ public class HighwaterResolverProcessorSupplier<K, VR> implements ProcessorSuppl
     }
 
     @Override
-    public Processor<K, VR> get() {
-        return new AbstractProcessor<K, VR>() {
+    public Processor<K, Change<VR>> get() {
+        return new AbstractProcessor<K, Change<VR>>() {
             private final Deserializer<Long> longSerde = Serdes.Long().deserializer();
             private KeyValueStore<K, Long> offsetHighWaterStore;
 
@@ -47,7 +48,7 @@ public class HighwaterResolverProcessorSupplier<K, VR> implements ProcessorSuppl
             }
 
             @Override
-            public void process(final K key, final VR value) {
+            public void process(final K key, final Change<VR> value) {
                 //highwater = x, value(offset = x+1, null)      => update & forward
                 //highwater = x, value(offset = x+1, non-null)  => update & forward
                 //highwater = x, value(offset = x, null)        => update & forward. May occur if there is a system failure and we are restoring.
@@ -66,10 +67,10 @@ public class HighwaterResolverProcessorSupplier<K, VR> implements ProcessorSuppl
                     // using greater-than to capture new highwater events.
                     // using equal as we want to resend in the case of a node failure.
                     offsetHighWaterStore.put(key, offset);
-                    context().forward(key, value);
+                    context().forward(key, value.newValue);
                 } else if (offset == -1L) {
                     //TODO - Potentially use a different header type to forward from KTableKTablePrefixScanJoin.
-                    context().forward(key, value);
+                    context().forward(key, value.newValue);
                 }
             }
         };

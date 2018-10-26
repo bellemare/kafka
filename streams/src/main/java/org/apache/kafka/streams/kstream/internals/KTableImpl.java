@@ -784,7 +784,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                 joinByPrefixName
         );
 
-        final ProcessorParameters<K, VR> highwaterProcessorParameters = new ProcessorParameters<>(
+        final ProcessorParameters<K, Change<VR>> highwaterProcessorParameters = new ProcessorParameters<>(
                 highwaterProcessor,
                 highwaterProcessorName
         );
@@ -861,16 +861,18 @@ Caused by: org.apache.kafka.streams.errors.StreamsException: A serializer (key: 
 	at org.apache.kafka.streams.processor.internals.ProcessorContextImpl.forward(ProcessorContextImpl.java:91)
 	at org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableKTablePrefixScanJoin$KTableKTableJoinProcessor.process(KTableKTablePrefixScanJoin.java:97)
          */
-//        GroupedTableOperationRepartitionNode<K, VR> gtorn =
-//                GroupedTableOperationRepartitionNode.groupedTableOperationNodeBuilder()
-//                    .withKeySerde(thisSerialized.keySerde())
-//                    .withValueSerde(joinedSerialized.valueSerde())
-//                    .withSinkName(finalRepartitionSinkName)
-//                    .withSourceName(finalRepartitionSourceName)
-//                    .withRepartitionTopic(finalRepartitionTopicName)
-//                    .withProcessorParameters(null)
-//                    .withNodeName("someNodeName")
-//                    .build();
+
+        GroupedTableOperationRepartitionNode<K, VR> gtorn =
+                GroupedTableOperationRepartitionNode.<K,VR>groupedTableOperationNodeBuilder()
+                    .withKeySerde(thisSerialized.keySerde())
+                    .withValueSerde(joinedSerialized.valueSerde())
+                    .withSinkName(finalRepartitionSinkName)
+                    .withSourceName(finalRepartitionSourceName)
+                    .withRepartitionTopic(finalRepartitionTopicName)
+                    .withProcessorParameters(null)
+                    .withNodeName("someNodeName")
+                    .build();
+
         //GroupedTableOperationRepartitionNode
         //addInternalTopic
         //addSink
@@ -927,11 +929,11 @@ Caused by: org.apache.kafka.streams.errors.StreamsException: A serializer (key: 
         nodes.add(oneToManyNode);
         nodes.add(oneToOneNode);
 
-//        builder.addGraphNode(nodes, gtorn);
-//        builder.addGraphNode(gtorn, outputNode2);
+        builder.addGraphNode(nodes, gtorn);
+        builder.addGraphNode(gtorn, outputNode2);
 
-        builder.addGraphNode(nodes, outputNode);
-        builder.addGraphNode(outputNode, outputNode2);
+//        builder.addGraphNode(nodes, outputNode);
+//        builder.addGraphNode(outputNode, outputNode2);
 
         return new KTableImpl<>(builder, outputProcessorName, outputProcessor, thisSerialized.keySerde(), joinedSerialized.valueSerde(),
                 Collections.singleton(finalRepartitionSourceName), materialized.storeName(), true, outputNode2);

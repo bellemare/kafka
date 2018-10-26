@@ -19,6 +19,7 @@ package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 import org.apache.kafka.common.header.Headers;
 import org.apache.kafka.streams.kstream.ValueJoiner;
+import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetterSupplier;
 import org.apache.kafka.streams.kstream.internals.KTableSourceValueGetterSupplier;
 import org.apache.kafka.streams.kstream.internals.KTableValueGetter;
@@ -93,7 +94,7 @@ public class ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO, VR>
 
                 if (oldValue != null || newValue != null) {
                     final K realKey = key.getPrimaryKey();
-                    context().forward(realKey, newValue);
+                    context().forward(realKey, new Change<>(newValue, null));
                 }
             }
         };

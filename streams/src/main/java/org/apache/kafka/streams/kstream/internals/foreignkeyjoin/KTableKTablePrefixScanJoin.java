@@ -94,7 +94,7 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
                 //Using -1 because we will not have race conditions from this side of the join to disambiguate with source OFFSET.
                 context().headers().remove(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString());
                 context().headers().add(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString(), negativeOneLong);
-                context().forward(realKey, newValue);
+                context().forward(realKey, new Change<>(newValue, null));
             }
         }
     }
