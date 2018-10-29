@@ -213,7 +213,7 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
                 new KeyValue<>(3, 0.23f), //Partition 2
                 new KeyValue<>(3, 7.77f), //Partition 0
                 new KeyValue<>(3, 6.66f), //Partition 1
-                new KeyValue<>(3, 1.11f)  //Partition 0 - This should be the final result.
+                new KeyValue<>(3, 1.11f)  //Partition 0 - This will be the final result.
         );
 
         final Properties producerConfig = new Properties();
@@ -238,10 +238,7 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         assertThat(resultTwo.get(resultTwo.size()-1), equalTo(expectedResultTwo.get(0)));
 
         if (verifyQueryableState) {
-            Set<KeyValue<Integer, String>> totalResults = new HashSet<>();
-            for (KeyValue<Integer,String> elem : expectedResult) {
-                totalResults.add(elem);
-            }
+            Set<KeyValue<Integer, String>> totalResults = new HashSet<>(expectedResult);
             totalResults.add(expectedResultTwo.get(expectedResultTwo.size()-1));
             verifyKTableKTableJoinQueryableState(joinType, totalResults);
         }
@@ -324,19 +321,8 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
             throw new RuntimeException("Current implementation of joinOnForeignKey requires a materialized store");
         }
 
-        ValueMapper<Float, String> tableOneKeyExtractor = new ValueMapper<Float, String>() {
-            @Override
-            public String apply(Float value) {
-                return Integer.toString((int)value.floatValue());
-            }
-        };
-
-        ValueJoiner<Float, Long, String> joiner = new ValueJoiner<Float, Long, String>() {
-            @Override
-            public String apply(final Float value1, final Long value2) {
-                return "value1=" + value1 + ",value2=" + value2;
-            }
-        };
+        ValueMapper<Float, String> tableOneKeyExtractor = (value) -> Integer.toString((int)value.floatValue());
+        ValueJoiner<Float, Long, String> joiner = (value1, value2) -> "value1=" + value1 + ",value2=" + value2;
 
         Serialized<Integer, Float> thisSerialized = Serialized.with(Serdes.Integer(), Serdes.Float());
         Serialized<String, Long> otherSerialized = Serialized.with(Serdes.String(), Serdes.Long());

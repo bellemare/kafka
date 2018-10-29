@@ -35,7 +35,8 @@ public class KTableKTableJoinNode<K, V1, V2, VR> extends BaseJoinProcessorNode<K
     private final String[] joinOtherStoreNames;
     private final MaterializedInternal materializedInternal;
 
-    KTableKTableJoinNode(final String nodeName,
+    //TODO - BELLEMARE - Remove Public, work on the builder .
+    public KTableKTableJoinNode(final String nodeName,
                          final ValueJoiner<? super V1, ? super V2, ? extends VR> valueJoiner,
                          final ProcessorParameters<K, V1> joinThisProcessorParameters,
                          final ProcessorParameters<K, V2> joinOtherProcessorParameters,

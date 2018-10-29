@@ -22,17 +22,35 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.processor.FailOnInvalidTimestamp;
+import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
 
 public class OptimizableRepartitionNode<K, V> extends BaseRepartitionNode {
 
-    OptimizableRepartitionNode(final String nodeName,
+    //TODO - Bellemare - move partitioner selection to the Base node?
+    //TODO - 2 - Make the constructors package private again and work on the Builder.
+    final private StreamPartitioner<K,V> partitioner;
+
+    public OptimizableRepartitionNode(final String nodeName,
                                final String sourceName,
                                final ProcessorParameters processorParameters,
                                final Serde<K> keySerde,
                                final Serde<V> valueSerde,
                                final String sinkName,
                                final String repartitionTopic) {
+        this(nodeName, sourceName, processorParameters, keySerde, valueSerde, sinkName, repartitionTopic, null);
+    }
+
+    public OptimizableRepartitionNode(final String nodeName,
+                               final String sourceName,
+                               final ProcessorParameters processorParameters,
+                               final Serde<K> keySerde,
+                               final Serde<V> valueSerde,
+                               final String sinkName,
+                               final String repartitionTopic,
+                               final StreamPartitioner partitioner) {
+
+        //TODO - Bellemare - move partitioner selection to the Base node?
 
         super(
             nodeName,
@@ -43,6 +61,7 @@ public class OptimizableRepartitionNode<K, V> extends BaseRepartitionNode {
             sinkName,
             repartitionTopic
         );
+        this.partitioner = partitioner;
 
     }
 
@@ -91,7 +110,7 @@ public class OptimizableRepartitionNode<K, V> extends BaseRepartitionNode {
             repartitionTopic,
             keySerializer,
             getValueSerializer(),
-            null,
+            this.partitioner,
             processorParameters.processorName()
         );
 
