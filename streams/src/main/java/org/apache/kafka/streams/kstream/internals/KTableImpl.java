@@ -842,14 +842,19 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 outputProcessorName
         );
 
-        final OptimizableRepartitionNode repartitionNode = new OptimizableRepartitionNode<>(repartitionSourceName,
-                repartitionSourceName,
-                repartitionProcessorParameters,
-                combinedKeySerde,
-                thisSerialized.valueSerde(),
-                repartitionSinkName,
-                repartitionTopicName,
-                partitioner);
+        final OptimizableRepartitionNode.OptimizableRepartitionNodeBuilder<CombinedKey<KO, K>, V> repartitionNodeBuilder =
+                OptimizableRepartitionNode.optimizableRepartitionNodeBuilder();
+
+        final OptimizableRepartitionNode<CombinedKey<KO, K>, V> repartitionNode = repartitionNodeBuilder
+                .withNodeName(repartitionSourceName)
+                .withProcessorParameters(repartitionProcessorParameters)
+                .withSinkName(repartitionSinkName)
+                .withSourceName(repartitionSourceName)
+                .withRepartitionTopic(repartitionTopicName)
+                .withValueSerde(thisSerialized.valueSerde())
+                .withPartitioner(partitioner)
+                .withKeySerde(combinedKeySerde)
+                .build();
 
         StoreBuilder prefixScanStoreBuilder = new KeyValueStoreMaterializer<>(repartitionedPrefixScannableStore).materialize();
         final StatefulProcessorNode oneToOneNode = new StatefulProcessorNode(
