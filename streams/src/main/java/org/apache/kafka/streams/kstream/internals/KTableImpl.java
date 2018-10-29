@@ -796,7 +796,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final long windowSize = retentionPeriod;
         final long segmentInterval = retentionPeriod;
         final StoreBuilder hwsb = Stores.windowStoreBuilder(
-            Stores.persistentWindowStore(finalRepartitionTableName, retentionPeriod, windowSize, false, segmentInterval),
+            //Stores.persistentWindowStore(finalRepartitionTableName, retentionPeriod, windowSize, false, segmentInterval),
+            Stores.persistentWindowStore(finalRepartitionTableName, Duration.ofDays(1), Duration.ofDays(1), false),
                 thisSerialized.keySerde(),
                 Serdes.Long());
 
