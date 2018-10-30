@@ -20,7 +20,6 @@ package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 import org.apache.kafka.common.serialization.Deserializer;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Map;
 
 class CombinedKeyDeserializer<KF, KP> implements Deserializer<CombinedKey<KF, KP>> {
@@ -41,16 +40,16 @@ class CombinedKeyDeserializer<KF, KP> implements Deserializer<CombinedKey<KF, KP
 
     @Override
     public CombinedKey<KF, KP> deserialize(final String topic, final byte[] data) {
-        ByteBuffer buf = ByteBuffer.wrap(data);
-        int foreignKeyLength = buf.getInt();
-        byte[] foreignKeyRaw = new byte[foreignKeyLength];
+        final ByteBuffer buf = ByteBuffer.wrap(data);
+        final int foreignKeyLength = buf.getInt();
+        final byte[] foreignKeyRaw = new byte[foreignKeyLength];
         buf.get(foreignKeyRaw, 0, foreignKeyLength);
         final KF foreignKey = foreignKeyDeserializer.deserialize(topic, foreignKeyRaw);
 
         if (data.length == 4 + foreignKeyLength) {
             return new CombinedKey<>(foreignKey);
         } else {
-            byte[] primaryKeyRaw = new byte[data.length - foreignKeyLength - 4];
+            final byte[] primaryKeyRaw = new byte[data.length - foreignKeyLength - 4];
             buf.get(primaryKeyRaw, 0, primaryKeyRaw.length);
             final KP primaryKey = primaryKeyDeserializer.deserialize(topic, primaryKeyRaw);
             return new CombinedKey<>(foreignKey, primaryKey);

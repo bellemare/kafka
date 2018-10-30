@@ -68,7 +68,6 @@ public class HighwaterResolverProcessorSupplier<K, VR> implements ProcessorSuppl
                     offsetHighWaterStore.put(key, offset);
                     context().forward(key, value);
                 } else if (offset == -1L) {
-                    //TODO - Potentially use a different header type to forward from KTableKTablePrefixScanJoin.
                     context().forward(key, value);
                 }
             }

@@ -60,12 +60,12 @@ public class TableProcessorNode<K, V, S extends StateStore> extends StreamsGraph
 
         topologyBuilder.addProcessor(processorName, processorParameters.processorSupplier(), parentNodeNames());
 
-        if (storeNames.length > 0) {
-            topologyBuilder.connectProcessorAndStateStores(processorName, storeNames);
-        }
-
         if (shouldMaterialize) {
             topologyBuilder.addStateStore(new KeyValueStoreMaterializer<>((MaterializedInternal<K, V, KeyValueStore<Bytes, byte[]>>) materializedInternal).materialize(), processorName);
+        }
+
+        if (storeNames.length > 0) {
+            topologyBuilder.connectProcessorAndStateStores(processorName, storeNames);
         }
     }
 }

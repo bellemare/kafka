@@ -49,13 +49,13 @@ class CombinedKeySerializer<KF, KP> implements Serializer<CombinedKey<KF, KP>> {
             //? bytes
             final byte[] primaryKeySerializedData = primaryKeySerializer.serialize(topic, data.getPrimaryKey());
 
-            ByteBuffer buf = ByteBuffer.allocate(4 + foreignKeySerializedData.length + primaryKeySerializedData.length);
+            final ByteBuffer buf = ByteBuffer.allocate(4 + foreignKeySerializedData.length + primaryKeySerializedData.length);
             buf.put(foreignKeyByteSize);
             buf.put(foreignKeySerializedData);
             buf.put(primaryKeySerializedData);
             return buf.array();
         } else {
-            ByteBuffer buf = ByteBuffer.allocate(4 + foreignKeySerializedData.length);
+            final ByteBuffer buf = ByteBuffer.allocate(4 + foreignKeySerializedData.length);
             buf.put(foreignKeyByteSize);
             buf.put(foreignKeySerializedData);
             return buf.array();

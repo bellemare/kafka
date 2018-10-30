@@ -32,7 +32,7 @@ public class StatefulProcessorNode<K, V> extends ProcessorGraphNode<K, V> {
 
 
     /**
-     * Create a node representing a stateful processor, where the named store has already been registered.
+     * Create a node representing a stateful processor, where the named stores have already been registered.
      */
     public StatefulProcessorNode(final String nodeName,
                                  final ProcessorParameters<K, V> processorParameters,
@@ -63,6 +63,23 @@ public class StatefulProcessorNode<K, V> extends ProcessorGraphNode<K, V> {
         this.storeBuilder = materializedKTableStoreBuilder;
     }
 
+    /**
+     * Create a node representing a stateful processor, where the named stores have already been registered,
+     * and where a store needs to be built and registered as part of building this node.
+     */
+    public StatefulProcessorNode(final String nodeName,
+                                 final ProcessorParameters<K, V> processorParameters,
+                                 final String[] storeNames,
+                                 final StoreBuilder<? extends StateStore> materializedKTableStoreBuilder,
+                                 final boolean repartitionRequired) {
+        super(nodeName,
+                processorParameters,
+                repartitionRequired);
+
+        this.storeNames = storeNames;
+        this.storeBuilder = materializedKTableStoreBuilder;
+    }
+
     @Override
     public String toString() {
         return "StatefulProcessorNode{" +
@@ -79,12 +96,12 @@ public class StatefulProcessorNode<K, V> extends ProcessorGraphNode<K, V> {
 
         topologyBuilder.addProcessor(processorName, processorSupplier, parentNodeNames());
 
-        if (storeNames != null && storeNames.length > 0) {
-            topologyBuilder.connectProcessorAndStateStores(processorName, storeNames);
-        }
-
         if (storeBuilder != null) {
             topologyBuilder.addStateStore(storeBuilder, processorName);
+        }
+
+        if (storeNames != null && storeNames.length > 0) {
+            topologyBuilder.connectProcessorAndStateStores(processorName, storeNames);
         }
     }
 }

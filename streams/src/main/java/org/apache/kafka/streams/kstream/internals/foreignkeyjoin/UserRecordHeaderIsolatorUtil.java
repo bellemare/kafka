@@ -21,23 +21,23 @@ import org.apache.kafka.common.header.Header;
 import org.apache.kafka.streams.processor.ProcessorContext;
 
 class UserRecordHeaderIsolatorUtil {
-    private final static String userHeader = "x";
+    private final static String USER_HEADER = "x";
 
-    static void addUserHeaderPrefix(ProcessorContext context) {
-        Header[] originalHeaders = context.headers().toArray();
+    static void addUserHeaderPrefix(final ProcessorContext context) {
+        final Header[] originalHeaders = context.headers().toArray();
         for (int i = 0; i < originalHeaders.length; ++i) {
-            Header header = originalHeaders[i];
+            final Header header = originalHeaders[i];
             context.headers().remove(header.key());
-            context.headers().add(userHeader + header.key(), header.value());
+            context.headers().add(USER_HEADER + header.key(), header.value());
         }
     }
 
-    static void removeUserHeaderPrefix(ProcessorContext context) {
-        Header[] prefixedHeaders = context.headers().toArray();
+    static void removeUserHeaderPrefix(final ProcessorContext context) {
+        final Header[] prefixedHeaders = context.headers().toArray();
         for (int i = 0; i < prefixedHeaders.length; ++i) {
-            Header header = prefixedHeaders[i];
+            final Header header = prefixedHeaders[i];
             context.headers().remove(header.key());
-            context.headers().add(header.key().substring(userHeader.length(), header.key().length()), header.value());
+            context.headers().add(header.key().substring(USER_HEADER.length(), header.key().length()), header.value());
         }
     }
 }

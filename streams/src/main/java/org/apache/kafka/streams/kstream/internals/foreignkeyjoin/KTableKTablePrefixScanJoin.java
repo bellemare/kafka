@@ -21,7 +21,6 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.errors.StreamsException;
 import org.apache.kafka.streams.kstream.ValueJoiner;
-import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetter;
 import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetterSupplier;
 import org.apache.kafka.streams.processor.AbstractProcessor;
@@ -31,7 +30,7 @@ import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.state.KeyValueIterator;
 
-public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSupplier<KO, Change<VO>> {
+public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSupplier<KO, VO> {
     private final ValueJoiner<V, VO, VR> joiner;
     private final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> primary;
     private final StateStore ref;
@@ -45,12 +44,12 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
     }
 
     @Override
-    public Processor<KO, Change<VO>> get() {
+    public Processor<KO, VO> get() {
         return new KTableKTableJoinProcessor(primary);
     }
 
 
-    private class KTableKTableJoinProcessor extends AbstractProcessor<KO, Change<VO>> {
+    private class KTableKTableJoinProcessor extends AbstractProcessor<KO, VO> {
 
         private final KTablePrefixValueGetter<CombinedKey<KO, K>, V> prefixValueGetter;
         private final byte[] negativeOneLong = Serdes.Long().serializer().serialize("fakeTopic", -1L);
@@ -70,7 +69,7 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
          * @throws StreamsException if key is null
          */
         @Override
-        public void process(final KO key, final Change<VO> change) {
+        public void process(final KO key, final VO value) {
             if (key == null)
                 throw new StreamsException("Record key for KTable foreignKeyJoin operator should not be null.");
 
@@ -88,8 +87,8 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
                 final V value2 = scanResult.value;
                 VR newValue = null;
 
-                if (change.newValue != null) {
-                    newValue = joiner.apply(value2, change.newValue);
+                if (value != null) {
+                    newValue = joiner.apply(value2, value);
                 }
                 //Using -1 because we will not have race conditions from this side of the join to disambiguate with source OFFSET.
                 context().headers().remove(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString());
