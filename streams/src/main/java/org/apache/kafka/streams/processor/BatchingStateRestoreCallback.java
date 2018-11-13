@@ -18,6 +18,7 @@
 package org.apache.kafka.streams.processor;
 
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.streams.KeyValue;
 
 import java.util.Collection;
@@ -36,6 +37,6 @@ public interface BatchingStateRestoreCallback extends StateRestoreCallback {
      *
      * @param records the records to restore.
      */
-    void restoreAll(Collection<KeyValue<byte[], byte[]>> records);
+    void restoreAll(Collection<ConsumerRecord<byte[], byte[]>> records);
 
 }

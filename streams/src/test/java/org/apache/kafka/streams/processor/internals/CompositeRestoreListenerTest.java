@@ -205,10 +205,10 @@ public class CompositeRestoreListenerTest {
 
     private static class MockNoListenBatchingStateRestoreCallback implements BatchingStateRestoreCallback {
 
-        Collection<KeyValue<byte[], byte[]>> restoredRecords;
+        Collection<ConsumerRecord<byte[], byte[]>> restoredRecords;
 
         @Override
-        public void restoreAll(final Collection<KeyValue<byte[], byte[]>> records) {
+        public void restoreAll(final Collection<ConsumerRecord<byte[], byte[]>> records) {
             restoredRecords = records;
         }
 

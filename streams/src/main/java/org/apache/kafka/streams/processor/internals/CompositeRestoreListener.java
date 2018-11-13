@@ -89,15 +89,15 @@ public class CompositeRestoreListener implements RecordBatchingStateRestoreCallb
         internalBatchingRestoreCallback.restoreBatch(records);
     }
 
+    @Override
+    public void restoreAll(Collection<ConsumerRecord<byte[], byte[]>> records) {
+        throw new UnsupportedOperationException();
+    }
+
     void setUserRestoreListener(final StateRestoreListener userRestoreListener) {
         if (userRestoreListener != null) {
             this.userRestoreListener = userRestoreListener;
         }
-    }
-
-    @Override
-    public void restoreAll(final Collection<KeyValue<byte[], byte[]>> records) {
-        throw new UnsupportedOperationException();
     }
 
     @Override

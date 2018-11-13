@@ -38,9 +38,9 @@ import org.rocksdb.CompressionType;
 import org.rocksdb.FlushOptions;
 import org.rocksdb.InfoLogLevel;
 import org.rocksdb.Options;
-import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
+import org.rocksdb.TtlDB;
 import org.rocksdb.WriteBatch;
 import org.rocksdb.WriteOptions;
 
@@ -65,7 +65,7 @@ import java.util.regex.Pattern;
  * If you intend to work on byte arrays as key, for example, you may want to wrap them with the {@code Bytes} class,
  * i.e. use {@code RocksDBStore<Bytes, ...>} rather than {@code RocksDBStore<byte[], ...>}.
  */
-public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
+public class RocksDBTTLStore implements KeyValueStore<Bytes, byte[]> {
 
     private static final Pattern SST_FILE_EXTENSION = Pattern.compile(".*\\.sst");
 
@@ -79,10 +79,12 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
 
     private final String name;
     private final String parentDir;
+    private final int timeToLive;
+    private final long restoreTimestamp = System.currentTimeMillis();
     private final Set<KeyValueIterator> openIterators = Collections.synchronizedSet(new HashSet<KeyValueIterator>());
 
     File dbDir;
-    private RocksDB db;
+    private TtlDB db;
 
     // the following option objects will be created in the constructor and closed in the close() method
     private Options options;
@@ -96,13 +98,14 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
 
     protected volatile boolean open = false;
 
-    RocksDBStore(final String name) {
-        this(name, DB_FILE_DIR);
+    RocksDBTTLStore(final String name, final int timeToLive) {
+        this(name, timeToLive, DB_FILE_DIR);
     }
 
-    RocksDBStore(final String name, final String parentDir) {
+    RocksDBTTLStore(final String name, final int timeToLive, final String parentDir) {
         this.name = name;
         this.parentDir = parentDir;
+        this.timeToLive = timeToLive;
     }
 
     @SuppressWarnings("unchecked")
@@ -155,7 +158,7 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
         try {
             try {
                 Files.createDirectories(dbDir.getParentFile().toPath());
-                db = RocksDB.open(options, dbDir.getAbsolutePath());
+                db = TtlDB.open(options, dbDir.getAbsolutePath(),this.timeToLive,false);
             } catch (final RocksDBException e) {
                 throw new ProcessorStateException("Error opening store " + name + " at location " + dbDir.toString(), e);
             }
@@ -266,7 +269,11 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
                 if (record.value() == null) {
                     batch.delete(record.key());
                 } else {
-                    batch.put(record.key(), record.value());
+                    System.out.println("RESTORE: record Timestamp = " + record.timestamp() + ", ttl=" + timeToLive*1000L + ", restoreTimeStamp =" + restoreTimestamp);
+                    if (record.timestamp() + timeToLive*1000L > restoreTimestamp) {
+                        System.out.println("Restoring!");
+                        batch.put(record.key(), record.value());
+                    }
                 }
             }
             write(batch);
@@ -354,7 +361,7 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
         Objects.requireNonNull(prefix, "prefix cannot be null");
         validateStoreOpen();
         // query rocksdb
-        final RocksDBStore.RocksDbPrefixIterator rocksDBRangeIterator = new RocksDbPrefixIterator(name, db.newIterator(), prefix.get());
+        final RocksDBTTLStore.RocksDbPrefixIterator rocksDBRangeIterator = new RocksDbPrefixIterator(name, db.newIterator(), prefix.get());
         openIterators.add(rocksDBRangeIterator);
         return rocksDBRangeIterator;
     }
@@ -567,9 +574,9 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
     // not private for testing
     static class RocksDBBatchingRestoreCallback extends AbstractNotifyingBatchingRestoreCallback {
 
-        private final RocksDBStore rocksDBStore;
+        private final RocksDBTTLStore rocksDBStore;
 
-        RocksDBBatchingRestoreCallback(final RocksDBStore rocksDBStore) {
+        RocksDBBatchingRestoreCallback(final RocksDBTTLStore rocksDBStore) {
             this.rocksDBStore = rocksDBStore;
         }
 

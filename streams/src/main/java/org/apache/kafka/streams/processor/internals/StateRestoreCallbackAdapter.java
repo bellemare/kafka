@@ -34,13 +34,7 @@ public final class StateRestoreCallbackAdapter {
         if (restoreCallback instanceof RecordBatchingStateRestoreCallback) {
             return (RecordBatchingStateRestoreCallback) restoreCallback;
         } else if (restoreCallback instanceof BatchingStateRestoreCallback) {
-            return records -> {
-                final List<KeyValue<byte[], byte[]>> keyValues = new ArrayList<>();
-                for (final ConsumerRecord<byte[], byte[]> record : records) {
-                    keyValues.add(new KeyValue<>(record.key(), record.value()));
-                }
-                ((BatchingStateRestoreCallback) restoreCallback).restoreAll(keyValues);
-            };
+            return records -> ((BatchingStateRestoreCallback) restoreCallback).restoreAll(records);
         } else {
             return records -> {
                 for (final ConsumerRecord<byte[], byte[]> record : records) {

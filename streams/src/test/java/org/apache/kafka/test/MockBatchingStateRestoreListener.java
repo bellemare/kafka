@@ -17,6 +17,7 @@
 
 package org.apache.kafka.test;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.processor.BatchingStateRestoreCallback;
 
@@ -25,10 +26,10 @@ import java.util.Collection;
 
 public class MockBatchingStateRestoreListener extends MockStateRestoreListener implements BatchingStateRestoreCallback {
 
-    private final Collection<KeyValue<byte[], byte[]>> restoredRecords = new ArrayList<>();
+    private final Collection<ConsumerRecord<byte[], byte[]>> restoredRecords = new ArrayList<>();
 
     @Override
-    public void restoreAll(final Collection<KeyValue<byte[], byte[]>> records) {
+    public void restoreAll(final Collection<ConsumerRecord<byte[], byte[]>> records) {
         restoredRecords.addAll(records);
     }
 
@@ -42,7 +43,7 @@ public class MockBatchingStateRestoreListener extends MockStateRestoreListener i
         restoredRecords.clear();
     }
 
-    public Collection<KeyValue<byte[], byte[]>> getRestoredRecords() {
+    public Collection<ConsumerRecord<byte[], byte[]>> getRestoredRecords() {
         return restoredRecords;
     }
 }

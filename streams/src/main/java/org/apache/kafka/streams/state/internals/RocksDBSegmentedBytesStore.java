@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.streams.state.internals;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.utils.Bytes;
@@ -33,6 +34,7 @@ import org.rocksdb.WriteBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -258,8 +260,12 @@ class RocksDBSegmentedBytesStore implements SegmentedBytesStore {
     private class RocksDBSegmentsBatchingRestoreCallback extends AbstractNotifyingBatchingRestoreCallback {
 
         @Override
-        public void restoreAll(final Collection<KeyValue<byte[], byte[]>> records) {
-            restoreAllInternal(records);
+        public void restoreAll(final Collection<ConsumerRecord<byte[], byte[]>> records) {
+            final List<KeyValue<byte[], byte[]>> keyValues = new ArrayList<>();
+            for (final ConsumerRecord<byte[], byte[]> record : records) {
+                keyValues.add(new KeyValue<>(record.key(), record.value()));
+            }
+            restoreAllInternal(keyValues);
         }
 
         @Override

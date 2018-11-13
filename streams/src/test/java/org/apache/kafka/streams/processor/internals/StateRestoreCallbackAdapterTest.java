@@ -69,10 +69,10 @@ public class StateRestoreCallbackAdapterTest {
 
     @Test
     public void shouldConvertToKeyValueBatches() {
-        final ArrayList<KeyValue<byte[], byte[]>> actual = new ArrayList<>();
+        final ArrayList<ConsumerRecord<byte[], byte[]>> actual = new ArrayList<>();
         final BatchingStateRestoreCallback callback = new BatchingStateRestoreCallback() {
             @Override
-            public void restoreAll(final Collection<KeyValue<byte[], byte[]>> records) {
+            public void restoreAll(final Collection<ConsumerRecord<byte[], byte[]>> records) {
                 actual.addAll(records);
             }
 

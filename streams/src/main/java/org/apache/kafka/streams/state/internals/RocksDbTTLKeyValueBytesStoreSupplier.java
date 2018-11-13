@@ -14,24 +14,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.kafka.streams.processor.internals;
+package org.apache.kafka.streams.state.internals;
 
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.processor.BatchingStateRestoreCallback;
+import org.apache.kafka.common.utils.Bytes;
+import org.apache.kafka.streams.state.KeyValueBytesStoreSupplier;
+import org.apache.kafka.streams.state.KeyValueStore;
 
-import java.util.Collection;
+public class RocksDbTTLKeyValueBytesStoreSupplier implements KeyValueBytesStoreSupplier {
 
-public interface RecordBatchingStateRestoreCallback extends BatchingStateRestoreCallback {
-    void restoreBatch(final Collection<ConsumerRecord<byte[], byte[]>> records);
+    private final String name;
+    private final int timeToLive;
 
-    @Override
-    default void restoreAll(final Collection<ConsumerRecord<byte[], byte[]>> records) {
-        throw new UnsupportedOperationException();
+    public RocksDbTTLKeyValueBytesStoreSupplier(final String name, final int timeToLive) {
+        this.name = name;
+        this.timeToLive = timeToLive;
     }
 
     @Override
-    default void restore(final byte[] key, final byte[] value) {
-        throw new UnsupportedOperationException();
+    public String name() {
+        return name;
+    }
+
+    @Override
+    public KeyValueStore<Bytes, byte[]> get() {
+        return new RocksDBTTLStore(name, timeToLive);
+    }
+
+    @Override
+    public String metricsScope() {
+        return "rocksdb-state";
     }
 }
