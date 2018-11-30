@@ -92,8 +92,7 @@ public class ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO, VR>
                     oldValue = joiner.apply(oldVal, value2);
 
                 if (oldValue != null || newValue != null) {
-                    final K realKey = key.getPrimaryKey();
-                    context().forward(realKey, newValue);
+                    context().forward(key, newValue);
                 }
             }
         };

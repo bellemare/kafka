@@ -21,20 +21,20 @@ import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.processor.StreamPartitioner;
 
-public class CombinedKeyByForeignKeyPartitioner<KO, K, V> implements StreamPartitioner<CombinedKey<KO, K>, V> {
+public class CombinedKeyByPrimaryKeyPartitioner<KO, K, V> implements StreamPartitioner<CombinedKey<KO, K>, V> {
 
-    private final Serializer<KO> keySerializer;
+    private final Serializer<K> keySerializer;
     private final String topic;
     private StreamPartitioner streamPartitioner;
 
     //Use the default partitioner
-    public CombinedKeyByForeignKeyPartitioner(final CombinedKeySerde<KO, K> keySerde, final String topic) {
+    public CombinedKeyByPrimaryKeyPartitioner(final CombinedKeySerde<KO, K> keySerde, final String topic) {
         this(keySerde, topic, null);
     }
 
     //Use a custom partitioner.
-    public CombinedKeyByForeignKeyPartitioner(final CombinedKeySerde<KO, K> keySerde, final String topic, final StreamPartitioner<KO, ?> streamPartitioner) {
-        this.keySerializer = keySerde.getForeignKeySerializer();
+    public CombinedKeyByPrimaryKeyPartitioner(final CombinedKeySerde<KO, K> keySerde, final String topic, final StreamPartitioner<KO, ?> streamPartitioner) {
+        this.keySerializer = keySerde.getPrimaryKeySerializer();
         this.topic = topic;
         this.streamPartitioner = streamPartitioner;
     }
@@ -42,11 +42,11 @@ public class CombinedKeyByForeignKeyPartitioner<KO, K, V> implements StreamParti
     @Override
     public Integer partition(final String topic, final CombinedKey<KO, K> key, final V value, final int numPartitions) {
         if (null == streamPartitioner) {
-            final byte[] keyBytes = keySerializer.serialize(topic, key.getForeignKey());
+            final byte[] keyBytes = keySerializer.serialize(topic, key.getPrimaryKey());
             //TODO - Evaluate breaking this out of the DefaultPartitioner Producer into an accessible function.
             return Utils.toPositive(Utils.murmur2(keyBytes)) % numPartitions;
         } else {
-            return streamPartitioner.partition(topic, key.getForeignKey(), value, numPartitions);
+            return streamPartitioner.partition(topic, key.getPrimaryKey(), value, numPartitions);
         }
     }
 }

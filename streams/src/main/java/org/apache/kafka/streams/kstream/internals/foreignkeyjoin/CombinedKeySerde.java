@@ -25,15 +25,15 @@ import java.util.Map;
 /**
  * Factory for creating CombinedKey serializers / deserializers.
  */
-public class CombinedKeySerde<KF, KP> implements Serde<CombinedKey<KF, KP>> {
-    final private Serializer<KP> primaryKeySerializer;
-    final private Deserializer<KP> primaryKeyDeserializer;
-    final private Serializer<KF> foreignKeySerializer;
-    final private Deserializer<KF> foreignKeyDeserializer;
-    final private Serializer<CombinedKey<KF, KP>> serializer;
-    final private Deserializer<CombinedKey<KF, KP>> deserializer;
+public class CombinedKeySerde<KO, K> implements Serde<CombinedKey<KO, K>> {
+    final private Serializer<K> primaryKeySerializer;
+    final private Deserializer<K> primaryKeyDeserializer;
+    final private Serializer<KO> foreignKeySerializer;
+    final private Deserializer<KO> foreignKeyDeserializer;
+    final private Serializer<CombinedKey<KO, K>> serializer;
+    final private Deserializer<CombinedKey<KO, K>> deserializer;
 
-    public CombinedKeySerde(final Serde<KF> foreignKeySerde, final Serde<KP> primaryKeySerde) {
+    public CombinedKeySerde(final Serde<KO> foreignKeySerde, final Serde<K> primaryKeySerde) {
         this.primaryKeySerializer = primaryKeySerde.serializer();
         this.primaryKeyDeserializer = primaryKeySerde.deserializer();
         this.foreignKeyDeserializer = foreignKeySerde.deserializer();
@@ -59,16 +59,20 @@ public class CombinedKeySerde<KF, KP> implements Serde<CombinedKey<KF, KP>> {
     }
 
     @Override
-    public Serializer<CombinedKey<KF, KP>> serializer() {
+    public Serializer<CombinedKey<KO, K>> serializer() {
         return serializer;
     }
 
     @Override
-    public Deserializer<CombinedKey<KF, KP>> deserializer() {
+    public Deserializer<CombinedKey<KO, K>> deserializer() {
         return deserializer;
     }
 
-    public Serializer<KF> getForeignKeySerializer() {
+    public Serializer<KO> getForeignKeySerializer() {
         return this.foreignKeySerializer;
+    }
+
+    public Serializer<K> getPrimaryKeySerializer() {
+        return this.primaryKeySerializer;
     }
 }

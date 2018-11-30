@@ -41,6 +41,7 @@ import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.ForeignKeySingl
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.HighwaterResolverProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableKTablePrefixScanJoin;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableRepartitionerProcessorSupplier;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SourceResolverProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableForeignKeyJoinResolutionNode;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableJoinNode;
 import org.apache.kafka.streams.kstream.internals.graph.OptimizableRepartitionNode;
@@ -530,7 +531,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final String joinThisName = builder.newProcessorName(JOINTHIS_NAME);
         final String joinOtherName = builder.newProcessorName(JOINOTHER_NAME);
 
-
         final KTableKTableAbstractJoin<K, R, V, V1> joinThis;
         final KTableKTableAbstractJoin<K, R, V1, V> joinOther;
 
@@ -778,28 +778,29 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final String finalRepartitionTopicName = JOINOTHER_NAME + finalRepartitionerName;
         final String finalRepartitionSourceName = builder.newProcessorName(SOURCE_NAME + finalRepartitionerName);
         final String finalRepartitionSinkName = builder.newProcessorName(SINK_NAME + finalRepartitionerName);
-        final String finalRepartitionTableName = builder.newStoreName(finalRepartitionerName);
 
         //Create the processor to resolve the propagation wrappers against the highwater mark for a given K.
-        final HighwaterResolverProcessorSupplier<K, VR> highwaterProcessor = new HighwaterResolverProcessorSupplier<>(finalRepartitionTableName);
-        final String highwaterProcessorName = builder.newProcessorName(KTableImpl.SOURCE_NAME);
-
-        // This will create a two-segment hopping window. Will maintain highwater mark for minimum of 12h, max 24h.
-        final long retentionPeriod = Duration.ofDays(1).toMillis();
-        final long windowSize = retentionPeriod;
-        final long segmentInterval = retentionPeriod;
-        final StoreBuilder hwsb = Stores.windowStoreBuilder(
-            //Stores.persistentWindowStore(finalRepartitionTableName, retentionPeriod, windowSize, false, segmentInterval),
-            Stores.persistentWindowStore(finalRepartitionTableName, Duration.ofDays(1), Duration.ofDays(1), false),
-                thisSerialized.keySerde(),
-                Serdes.Long());
-
-        final Materialized<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMat =
-                Materialized.<K, Long, KeyValueStore<Bytes, byte[]>>as(hwsb.build().name())
-                .withKeySerde(thisSerialized.keySerde())
-                .withValueSerde(Serdes.Long());
-        final MaterializedInternal<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMatInternal =
-                new MaterializedInternal<>(highwaterMat);
+        final SourceResolverProcessorSupplier<K, KO, V, VR> resolverProcessor = new SourceResolverProcessorSupplier<>(this.queryableStoreName, keyExtractor);
+        final String resolverProcessorName = builder.newProcessorName(KTableImpl.SOURCE_NAME);
+//        final HighwaterResolverProcessorSupplier<K, VR> highwaterProcessor = new HighwaterResolverProcessorSupplier<>(highwaterTableName);
+//        final String highwaterProcessorName = builder.newProcessorName(KTableImpl.SOURCE_NAME);
+//
+//        // This will create a two-segment hopping window. Will maintain highwater mark for minimum of 12h, max 24h.
+//        final long retentionPeriod = Duration.ofDays(1).toMillis();
+//        final long windowSize = retentionPeriod;
+//        final long segmentInterval = retentionPeriod;
+//        final StoreBuilder hwsb = Stores.windowStoreBuilder(
+//            //Stores.persistentWindowStore(highwaterTableName, retentionPeriod, windowSize, false, segmentInterval),
+//            Stores.persistentWindowStore(highwaterTableName, Duration.ofDays(1), Duration.ofDays(1), false),
+//                thisSerialized.keySerde(),
+//                Serdes.Long());
+//
+//        final Materialized<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMat =
+//                Materialized.<K, Long, KeyValueStore<Bytes, byte[]>>as(hwsb.build().name())
+//                .withKeySerde(thisSerialized.keySerde())
+//                .withValueSerde(Serdes.Long());
+//        final MaterializedInternal<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMatInternal =
+//                new MaterializedInternal<>(highwaterMat);
 
         final KTableSource<K, VR> outputProcessor = new KTableSource<>(materialized.storeName());
         final String outputProcessorName = builder.newProcessorName(SOURCE_NAME);
@@ -826,9 +827,9 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 joinByPrefixName
         );
 
-        final ProcessorParameters<K, VR> highwaterProcessorParameters = new ProcessorParameters<>(
-                highwaterProcessor,
-                highwaterProcessorName
+        final ProcessorParameters<CombinedKey<KO, K>, VR> resolverProcessorParameters = new ProcessorParameters<>(
+                resolverProcessor,
+                resolverProcessorName
         );
 
         final ProcessorParameters<K, VR> outputProcessorParameters = new ProcessorParameters<>(
@@ -837,17 +838,16 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         );
 
         final KTableKTableForeignKeyJoinResolutionNode fkSinkAndResolveNode = new KTableKTableForeignKeyJoinResolutionNode<>(
-                highwaterProcessorParameters.processorName(),
+                resolverProcessorParameters.processorName(),
                 joinOneToOneProcessorParameters,
                 joinByPrefixProcessorParameters,
-                highwaterProcessorParameters,
+                resolverProcessorParameters,
                 finalRepartitionTopicName,
                 finalRepartitionSinkName,
                 finalRepartitionSourceName,
-                thisSerialized.keySerde(),
+                combinedKeySerde,
                 joinedSerialized.valueSerde(),
-                highwaterMatInternal,
-                finalRepartitionTableName
+                this.valueGetterSupplier()
                 );
 
         final OptimizableRepartitionNode.OptimizableRepartitionNodeBuilder<CombinedKey<KO, K>, V> repartitionNodeBuilder =
