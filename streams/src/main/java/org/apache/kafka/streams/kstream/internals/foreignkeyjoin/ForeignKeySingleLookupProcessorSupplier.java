@@ -17,7 +17,6 @@
 
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
-import org.apache.kafka.common.header.Headers;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetterSupplier;
 import org.apache.kafka.streams.kstream.internals.KTableSourceValueGetterSupplier;
@@ -62,37 +61,19 @@ public class ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO, VR>
 
             @Override
             public void process(final CombinedKey<KO, K> key, final V value) {
-                final Headers readHead = context().headers();
-                final byte[] propagateBytes = readHead.lastHeader(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString()).value();
-                final boolean propagate = propagateBytes[0] == 1;
+                VO foreignValue = foreignValues.get(key.getForeignKey());
 
-                //We don't want to propagate a null due to a foreign-key change past this point.
-                //Propagation of the updated value will occur in a different partition. State store needs deletion.
-                if (!propagate) {
+                if (value == null) {
                     store.delete(key);
-                    return;
+                } else {
+                    store.put(key, value);
                 }
 
-                final V oldVal = store.get(key);
-                store.put(key, value);
-
-                VR newValue = null;
-                VR oldValue = null;
-                VO value2 = null;
-
-                if (value != null || oldVal != null) {
-                    final KO foreignKey = key.getForeignKey();
-                    value2 = foreignValues.get(foreignKey);
-                }
-
-                if (value != null && value2 != null)
-                    newValue = joiner.apply(value, value2);
-
-                if (oldVal != null && value2 != null)
-                    oldValue = joiner.apply(oldVal, value2);
-
-                if (oldValue != null || newValue != null) {
-                    context().forward(key, newValue);
+                if (value != null && foreignValue != null) {
+                    final VR newJoined = joiner.apply(value, foreignValue);
+                    context().forward(key, newJoined);
+                } else if (value == null) {
+                    context().forward(key, null);
                 }
             }
         };

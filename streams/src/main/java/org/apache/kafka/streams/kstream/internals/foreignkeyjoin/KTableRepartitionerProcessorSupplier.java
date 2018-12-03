@@ -26,13 +26,9 @@ import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 
-import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.UserRecordHeaderIsolatorUtil.addUserHeaderPrefix;
-
 public class KTableRepartitionerProcessorSupplier<K, KO, V> implements ProcessorSupplier<K, Change<V>> {
 
     private final ValueMapper<V, KO> mapper;
-    private final byte[] falseByteArray = {(byte) 0};
-    private final byte[] trueByteArray = {(byte) 1};
 
     public KTableRepartitionerProcessorSupplier(final ValueMapper<V, KO> extractor) {
         this.mapper = extractor;
@@ -53,7 +49,6 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
 
         @Override
         public void process(final K key, final Change<V> change) {
-            addUserHeaderPrefix(context());
             if (change.oldValue != null) {
                 final KO oldForeignKey = mapper.apply(change.oldValue);
                 final CombinedKey<KO, K> combinedOldKey = new CombinedKey<>(oldForeignKey, key);
@@ -64,37 +59,24 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
                     //Requires equal to be defined...
                     if (oldForeignKey.equals(extractedNewForeignKey)) {
                         //Same foreign key. Just propagate onwards.
-                        final byte[] offset = longSerializer.serialize(null, context().offset());
-                        context().headers().add(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString(), offset);
-                        context().headers().add(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString(), trueByteArray);
                         context().forward(combinedNewKey, change.newValue);
                     } else {
                         //Different Foreign Key - delete the old key value and propagate the new one.
                         //Note that we indicate that we don't want to propagate the delete to the join output. It is set to false.
                         //This will be used by a downstream processor to delete it from the local state store, but not propagate it
                         //as a full delete. This avoids a race condition in the resolution of the output.
-                        final byte[] offset = longSerializer.serialize(null, context().offset());
-                        context().headers().add(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString(), offset);
-                        context().headers().add(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString(), falseByteArray);
                         //Don't need to send a value, as this only indicates a delete.
                         context().forward(combinedOldKey, null);
-
-                        context().headers().remove(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString());
-                        context().headers().add(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString(), trueByteArray);
                         context().forward(combinedNewKey, change.newValue);
                     }
                 } else {
                     final byte[] offset = longSerializer.serialize(null, context().offset());
-                    context().headers().add(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString(), offset);
-                    context().headers().add(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString(), trueByteArray);
                     context().forward(combinedOldKey, null);
                 }
             } else if (change.newValue != null) {
                 final KO extractedForeignKeyValue = mapper.apply(change.newValue);
                 final CombinedKey<KO, K> newCombinedKeyValue = new CombinedKey<>(extractedForeignKeyValue, key);
                 final byte[] offset = longSerializer.serialize(null, context().offset());
-                context().headers().add(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString(), offset);
-                context().headers().add(ForeignKeyJoinInternalHeaderTypes.PROPAGATE.toString(), trueByteArray);
                 context().forward(newCombinedKeyValue, change.newValue);
             }
         }
