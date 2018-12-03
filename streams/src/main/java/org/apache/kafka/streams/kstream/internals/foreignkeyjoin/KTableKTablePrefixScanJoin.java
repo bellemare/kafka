@@ -17,7 +17,6 @@
 
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
-import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.errors.StreamsException;
 import org.apache.kafka.streams.kstream.ValueJoiner;
@@ -56,7 +55,6 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
     private class KTableKTableJoinProcessor extends AbstractProcessor<KO, Change<VO>> {
 
         private final KTablePrefixValueGetter<CombinedKey<KO, K>, V> prefixValueGetter;
-        private final byte[] negativeOneLong = Serdes.Long().serializer().serialize("fakeTopic", -1L);
 
         public KTableKTableJoinProcessor(final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> valueGetter) {
             this.prefixValueGetter = valueGetter.get();
