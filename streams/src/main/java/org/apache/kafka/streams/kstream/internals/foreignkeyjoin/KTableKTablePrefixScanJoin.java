@@ -21,6 +21,7 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.errors.StreamsException;
 import org.apache.kafka.streams.kstream.ValueJoiner;
+import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetter;
 import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetterSupplier;
 import org.apache.kafka.streams.processor.AbstractProcessor;
@@ -29,11 +30,14 @@ import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.state.KeyValueIterator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSupplier<KO, VO> {
+public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSupplier<KO, Change<VO>> {
     private final ValueJoiner<V, VO, VR> joiner;
     private final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> primary;
     private final StateStore ref;
+    private static final Logger LOG = LoggerFactory.getLogger(KTableKTablePrefixScanJoin.class);
 
     public KTableKTablePrefixScanJoin(final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> primary,
                                       final ValueJoiner<V, VO, VR> joiner,
@@ -44,12 +48,12 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
     }
 
     @Override
-    public Processor<KO, VO> get() {
+    public Processor<KO, Change<VO>> get() {
         return new KTableKTableJoinProcessor(primary);
     }
 
 
-    private class KTableKTableJoinProcessor extends AbstractProcessor<KO, VO> {
+    private class KTableKTableJoinProcessor extends AbstractProcessor<KO, Change<VO>> {
 
         private final KTablePrefixValueGetter<CombinedKey<KO, K>, V> prefixValueGetter;
         private final byte[] negativeOneLong = Serdes.Long().serializer().serialize("fakeTopic", -1L);
@@ -69,7 +73,7 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
          * @throws StreamsException if key is null
          */
         @Override
-        public void process(final KO key, final VO value) {
+        public void process(final KO key, final Change<VO> value) {
             if (key == null)
                 throw new StreamsException("Record key for KTable foreignKeyJoin operator should not be null.");
 
@@ -77,8 +81,15 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
             final CombinedKey<KO, K> prefixKey = new CombinedKey<>(key);
 
             //Flush the foreign state store, as we need all elements to be flushed for a proper prefix scan.
+
+            final Long time1 = System.currentTimeMillis();
             ref.flush();
+            final Long time2 = System.currentTimeMillis();
             final KeyValueIterator<CombinedKey<KO, K>, V> prefixScanResults = prefixValueGetter.prefixScan(prefixKey);
+            final Long time3 = System.currentTimeMillis();
+
+            LOG.info("Time Measurement: Flush: " + (time2 - time1));
+            LOG.info("Time Measurement: PrefixScan: " + (time3 - time2));
 
             while (prefixScanResults.hasNext()) {
 
@@ -88,7 +99,7 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
                 VR newValue = null;
 
                 if (value != null) {
-                    newValue = joiner.apply(value2, value);
+                    newValue = joiner.apply(value2, value.newValue);
                 }
                 //Using -1 because we will not have race conditions from this side of the join to disambiguate with source OFFSET.
                 context().headers().remove(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString());

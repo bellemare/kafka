@@ -324,12 +324,7 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         ValueMapper<Float, String> tableOneKeyExtractor = (value) -> Integer.toString((int)value.floatValue());
         ValueJoiner<Float, Long, String> joiner = (value1, value2) -> "value1=" + value1 + ",value2=" + value2;
 
-        Serialized<Integer, Float> thisSerialized = Serialized.with(Serdes.Integer(), Serdes.Float());
-        Serialized<String, Long> otherSerialized = Serialized.with(Serdes.String(), Serdes.Long());
-        Serialized<Integer, String> joinedSerialized = Serialized.with(Serdes.Integer(), Serdes.String());
-
-        table1.joinOnForeignKey(table2, tableOneKeyExtractor, joiner, materialized,
-                thisSerialized, otherSerialized, joinedSerialized)
+        table1.join(table2, tableOneKeyExtractor, joiner, materialized)
             .toStream()
             .to(OUTPUT, Produced.with(Serdes.Integer(), Serdes.String()));
 

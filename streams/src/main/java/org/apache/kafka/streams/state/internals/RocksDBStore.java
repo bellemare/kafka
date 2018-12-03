@@ -95,11 +95,11 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
 
     protected volatile boolean open = false;
 
-    RocksDBStore(final String name) {
+    public RocksDBStore(final String name) {
         this(name, DB_FILE_DIR);
     }
 
-    RocksDBStore(final String name, final String parentDir) {
+    public RocksDBStore(final String name, final String parentDir) {
         this.name = name;
         this.parentDir = parentDir;
     }
@@ -534,10 +534,10 @@ public class RocksDBStore implements KeyValueStore<Bytes, byte[]> {
         }
     }
 
-    private class RocksDbPrefixIterator extends RocksDbIterator {
+    public class RocksDbPrefixIterator extends RocksDbIterator {
         private byte[] rawPrefix;
 
-        RocksDbPrefixIterator(final String name, final RocksIterator newIterator, final byte[] prefix) {
+        public RocksDbPrefixIterator(final String name, final RocksIterator newIterator, final byte[] prefix) {
             super(name, newIterator);
             this.rawPrefix = prefix;
             newIterator.seek(rawPrefix);

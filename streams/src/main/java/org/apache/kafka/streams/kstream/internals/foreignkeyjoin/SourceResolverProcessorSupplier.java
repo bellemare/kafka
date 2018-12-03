@@ -17,16 +17,12 @@
 
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
-import org.apache.kafka.common.serialization.Deserializer;
-import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
-
-import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.UserRecordHeaderIsolatorUtil.removeUserHeaderPrefix;
 
 public class SourceResolverProcessorSupplier<K, KO, V, VR> implements ProcessorSupplier<CombinedKey<KO, K>, VR> {
     private final String stateStoreName;
@@ -51,18 +47,12 @@ public class SourceResolverProcessorSupplier<K, KO, V, VR> implements ProcessorS
 
             @Override
             public void process(CombinedKey<KO, K> key, VR value) {
-                //Validate that keyExtractor(V) == CombinedKey<KO,_>
-
                 final V ogVal = originalSource.get(key.getPrimaryKey());
-
                 final KO ogExtractedKey = keyExtractor.apply(ogVal);
                 final KO foreignKey = key.getForeignKey();
 
-                //Forward if deleted (both null)
-                //Forward if it matches
-                if (ogVal == null && value == null) {
-                    context().forward(key.getPrimaryKey(), value);
-                } else if (foreignKey.equals(ogExtractedKey)) {
+                //If this value doesn't match the current value from the original table, it is stale and should be discarded.
+                if (ogVal == null && value == null || foreignKey.equals(ogExtractedKey)) {
                     context().forward(key.getPrimaryKey(), value);
                 }
             }
