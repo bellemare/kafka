@@ -18,13 +18,12 @@
 package org.apache.kafka.streams.kstream.internals.graph;
 
 import org.apache.kafka.common.serialization.Serde;
-import org.apache.kafka.common.utils.Bytes;
-import org.apache.kafka.streams.kstream.internals.KeyValueStoreMaterializer;
-import org.apache.kafka.streams.kstream.internals.MaterializedInternal;
+import org.apache.kafka.streams.kstream.internals.KTableValueGetterSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKey;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKeySerde;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.DefaultCombinedKeyPartitioner;
 import org.apache.kafka.streams.processor.FailOnInvalidTimestamp;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
-import org.apache.kafka.streams.state.KeyValueStore;
 
 /**
  * Too much specific information to generalize so the Foreign Key KTable-KTable join requires a specific node.
@@ -32,38 +31,35 @@ import org.apache.kafka.streams.state.KeyValueStore;
 public class KTableKTableForeignKeyJoinResolutionNode<VR, K, V, KO, VO> extends StreamsGraphNode {
     private final ProcessorParameters<CombinedKey<KO, K>, V> joinOneToOneProcessorParameters;
     private final ProcessorParameters<KO, VO> joinByPrefixProcessorParameters;
-    private final ProcessorParameters<K, VR> highwaterProcessorParameters;
+    private final ProcessorParameters<CombinedKey<KO, K>, VR> resolverProcessorParameters;
     private final String finalRepartitionTopicName;
     private final String finalRepartitionSinkName;
     private final String finalRepartitionSourceName;
-    private final Serde<K> thisKeySerde;
+    private final CombinedKeySerde<KO, K> combinedKeySerde;
     private final Serde<VR> joinedValueSerde;
-    private final MaterializedInternal<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMatInternal;
-    private final String finalRepartitionTableName;
+    private final KTableValueGetterSupplier<K, V> originalValueGetter;
 
     public KTableKTableForeignKeyJoinResolutionNode(final String nodeName,
                                                     final ProcessorParameters<CombinedKey<KO, K>, V> joinOneToOneProcessorParameters,
                                                     final ProcessorParameters<KO, VO> joinByPrefixProcessorParameters,
-                                                    final ProcessorParameters<K, VR> highwaterProcessorParameters,
+                                                    final ProcessorParameters<CombinedKey<KO, K>, VR> resolverProcessorParameters,
                                                     final String finalRepartitionTopicName,
                                                     final String finalRepartitionSinkName,
                                                     final String finalRepartitionSourceName,
-                                                    final Serde<K> thisKeySerde,
+                                                    final CombinedKeySerde<KO, K> combinedKeySerde,
                                                     final Serde<VR> joinedValueSerde,
-                                                    final MaterializedInternal<K, Long, KeyValueStore<Bytes, byte[]>> highwaterMatInternal,
-                                                    final String finalRepartitionTableName
+                                                    final KTableValueGetterSupplier<K, V> originalValueGetter
     ) {
         super(nodeName, false);
         this.joinOneToOneProcessorParameters = joinOneToOneProcessorParameters;
         this.joinByPrefixProcessorParameters = joinByPrefixProcessorParameters;
-        this.highwaterProcessorParameters = highwaterProcessorParameters;
+        this.resolverProcessorParameters = resolverProcessorParameters;
         this.finalRepartitionTopicName = finalRepartitionTopicName;
         this.finalRepartitionSinkName = finalRepartitionSinkName;
         this.finalRepartitionSourceName = finalRepartitionSourceName;
-        this.thisKeySerde = thisKeySerde;
+        this.combinedKeySerde = combinedKeySerde;
         this.joinedValueSerde = joinedValueSerde;
-        this.finalRepartitionTableName = finalRepartitionTableName;
-        this.highwaterMatInternal = highwaterMatInternal;
+        this.originalValueGetter = originalValueGetter;
     }
 
     @Override
@@ -71,16 +67,15 @@ public class KTableKTableForeignKeyJoinResolutionNode<VR, K, V, KO, VO> extends 
         topologyBuilder.addInternalTopic(finalRepartitionTopicName);
         //Repartition back to the original partitioning structure
         topologyBuilder.addSink(finalRepartitionSinkName, finalRepartitionTopicName,
-                thisKeySerde.serializer(), joinedValueSerde.serializer(),
-                null,
+                combinedKeySerde.serializer(), joinedValueSerde.serializer(),
+                new DefaultCombinedKeyPartitioner<>(this.combinedKeySerde, true),
                 joinByPrefixProcessorParameters.processorName(), joinOneToOneProcessorParameters.processorName());
 
         topologyBuilder.addSource(null, finalRepartitionSourceName, new FailOnInvalidTimestamp(),
-                thisKeySerde.deserializer(), joinedValueSerde.deserializer(), finalRepartitionTopicName);
+                combinedKeySerde.deserializer(), joinedValueSerde.deserializer(), finalRepartitionTopicName);
 
         //Connect highwaterProcessor to source, add the state store, and connect the statestore with the processor.
-        topologyBuilder.addProcessor(highwaterProcessorParameters.processorName(), highwaterProcessorParameters.processorSupplier(), finalRepartitionSourceName);
-        topologyBuilder.addStateStore(new KeyValueStoreMaterializer<>(highwaterMatInternal).materialize(), highwaterProcessorParameters.processorName());
-        topologyBuilder.connectProcessorAndStateStores(highwaterProcessorParameters.processorName(), finalRepartitionTableName);
+        topologyBuilder.addProcessor(resolverProcessorParameters.processorName(), resolverProcessorParameters.processorSupplier(), finalRepartitionSourceName);
+        topologyBuilder.connectProcessorAndStateStores(resolverProcessorParameters.processorName(), originalValueGetter.storeNames());
     }
 }

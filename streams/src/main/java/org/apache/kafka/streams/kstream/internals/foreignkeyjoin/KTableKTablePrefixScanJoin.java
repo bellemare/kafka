@@ -17,10 +17,10 @@
 
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
-import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.errors.StreamsException;
 import org.apache.kafka.streams.kstream.ValueJoiner;
+import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetter;
 import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetterSupplier;
 import org.apache.kafka.streams.processor.AbstractProcessor;
@@ -29,11 +29,14 @@ import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.state.KeyValueIterator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSupplier<KO, VO> {
+public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSupplier<KO, Change<VO>> {
     private final ValueJoiner<V, VO, VR> joiner;
     private final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> primary;
     private final StateStore ref;
+    private static final Logger LOG = LoggerFactory.getLogger(KTableKTablePrefixScanJoin.class);
 
     public KTableKTablePrefixScanJoin(final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> primary,
                                       final ValueJoiner<V, VO, VR> joiner,
@@ -44,15 +47,14 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
     }
 
     @Override
-    public Processor<KO, VO> get() {
+    public Processor<KO, Change<VO>> get() {
         return new KTableKTableJoinProcessor(primary);
     }
 
 
-    private class KTableKTableJoinProcessor extends AbstractProcessor<KO, VO> {
+    private class KTableKTableJoinProcessor extends AbstractProcessor<KO, Change<VO>> {
 
         private final KTablePrefixValueGetter<CombinedKey<KO, K>, V> prefixValueGetter;
-        private final byte[] negativeOneLong = Serdes.Long().serializer().serialize("fakeTopic", -1L);
 
         public KTableKTableJoinProcessor(final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> valueGetter) {
             this.prefixValueGetter = valueGetter.get();
@@ -69,14 +71,20 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
          * @throws StreamsException if key is null
          */
         @Override
-        public void process(final KO key, final VO value) {
+        public void process(final KO key, final Change<VO> value) {
             if (key == null)
                 throw new StreamsException("Record key for KTable foreignKeyJoin operator should not be null.");
+
+            //Don't do any work if the value hasn't changed.
+            //It can be expensive to update all the records returned from the prefixScan.
+            if (value.oldValue == value.newValue)
+                return;
 
             //Wrap it in a combinedKey and let the serializer handle the prefixing.
             final CombinedKey<KO, K> prefixKey = new CombinedKey<>(key);
 
             //Flush the foreign state store, as we need all elements to be flushed for a proper prefix scan.
+
             ref.flush();
             final KeyValueIterator<CombinedKey<KO, K>, V> prefixScanResults = prefixValueGetter.prefixScan(prefixKey);
 
@@ -87,13 +95,10 @@ public class KTableKTablePrefixScanJoin<K, KO, V, VO, VR> implements ProcessorSu
                 final V value2 = scanResult.value;
                 VR newValue = null;
 
-                if (value != null) {
-                    newValue = joiner.apply(value2, value);
+                if (value.newValue != null) {
+                    newValue = joiner.apply(value2, value.newValue);
                 }
-                //Using -1 because we will not have race conditions from this side of the join to disambiguate with source OFFSET.
-                context().headers().remove(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString());
-                context().headers().add(ForeignKeyJoinInternalHeaderTypes.OFFSET.toString(), negativeOneLong);
-                context().forward(realKey, newValue);
+                context().forward(new CombinedKey<>(key, realKey), newValue);
             }
         }
     }
