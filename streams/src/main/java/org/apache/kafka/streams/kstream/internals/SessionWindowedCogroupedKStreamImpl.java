@@ -15,26 +15,16 @@
  * limitations under the License.
  */
 package org.apache.kafka.streams.kstream.internals;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.kstream.Aggregator;
-import org.apache.kafka.streams.kstream.CogroupedKStream;
 import org.apache.kafka.streams.kstream.Initializer;
 import org.apache.kafka.streams.kstream.KGroupedStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Merger;
-import org.apache.kafka.streams.kstream.SessionWindowedKStream;
+import org.apache.kafka.streams.kstream.SessionWindowedCogroupedKStream;
 import org.apache.kafka.streams.kstream.SessionWindows;
 import org.apache.kafka.streams.kstream.Windowed;
 import org.apache.kafka.streams.kstream.WindowedSerdes;
@@ -47,69 +37,72 @@ import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.SessionStore;
 import org.apache.kafka.streams.state.StoreBuilder;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.apache.kafka.streams.kstream.internals.KGroupedStreamImpl.AGGREGATE_NAME;
 
-class CogroupedKStreamImpl<K, V> implements CogroupedKStream<K, V> {
+class SessionWindowedCogroupedKStreamImpl<K, V> implements SessionWindowedCogroupedKStream<K, V> {
     private final AtomicInteger index = new AtomicInteger(0);
-    private static final String COGROUP_AGGREGATE_NAME = "KSTREAM-COGROUP-AGGREGATE-";
-    private static final String COGROUP_NAME = "KSTREAM-COGROUP-";
-    private enum AggregateType {
-        AGGREGATE,
-        SESSION_WINDOW_AGGREGATE,
-        WINDOW_AGGREGATE
-    }
     private final InternalStreamsBuilder builder;
+    private final SessionWindows sessionWindows;
+    private final Map<KGroupedStream, Aggregator> pairs;
     private final Serde<K> keySerde;
-    private final Map<KGroupedStream, Aggregator> pairs = new HashMap<>();
-    private final Map<KGroupedStreamImpl, String> repartitionNames = new HashMap<>();
-    //private final CogroupedKStreamAggregateBuilder<K, V> aggregateBuilder;
 
-    <T> CogroupedKStreamImpl(final InternalStreamsBuilder builder,
-                             final KGroupedStream<K, T> groupedStream,
-                             final Serde<K> keySerde,
-                             final Aggregator<? super K, ? super T, V> aggregator) {
+    private static final String SESSION_COGROUP_AGGREGATE_NAME = "KSTREAM-COGROUP-SESSION-AGGREGATE-";
+    private static final String SESSION_COGROUP_NAME = "KSTREAM-COGROUP-SESSION-";
+
+    public SessionWindowedCogroupedKStreamImpl(SessionWindows sessionWindows,
+                                               InternalStreamsBuilder builder,
+                                               Map<KGroupedStream, Aggregator> pairs,
+                                               String name,
+                                               Serde<K> keySerde,
+                                               Serde<V> valueSerde) {
+        /*
+        sourceNodes,
+        name,
+        keySerde,
+        valSerde,
+        streamsGraphNode
+         */
+
+        this.sessionWindows = sessionWindows;
         this.builder = builder;
+        this.pairs = pairs;
         this.keySerde = keySerde;
-        cogroup(groupedStream, aggregator);
     }
 
     @Override
-    public <T> CogroupedKStream<K, V> cogroup(final KGroupedStream<K, T> groupedStream,
-                                              final Aggregator<? super K, ? super T, V> aggregator) {
-        Objects.requireNonNull(groupedStream, "groupedStream can't be null");
-        Objects.requireNonNull(aggregator, "aggregator can't be null");
-        pairs.put(groupedStream, aggregator);
-        return this;
-    }
-
-    @Override
-    public <VR> KTable<K, VR> aggregate(Initializer<VR> initializer, Serde<VR> valueSerde) {
-        return aggregate(initializer, valueSerde, Materialized.with(keySerde, null));
-    }
-
-    @Override
-    public <VR> KTable<K, VR> aggregate(Initializer<VR> initializer, Serde<VR> valueSerde, Materialized<K, VR, KeyValueStore<Bytes, byte[]>> materialized) {
+    public <VR> KTable<Windowed<K>, VR> aggregate(final Initializer<VR> initializer,
+                                                  final Merger<? super K, VR> sessionMerger,
+                                                  final Materialized<K, VR, SessionStore<Bytes, byte[]>> materialized) {
         Objects.requireNonNull(initializer, "initializer can't be null");
-        Objects.requireNonNull(valueSerde, "valueSerde can't be null");
+        Objects.requireNonNull(sessionMerger, "sessionMerger can't be null");
         Objects.requireNonNull(materialized, "materialized can't be null");
-
-        final MaterializedInternal<K, VR, KeyValueStore<Bytes, byte[]>> materializedInternal = new MaterializedInternal<>(materialized);
-        materializedInternal.generateStoreNameIfNeeded(builder, COGROUP_AGGREGATE_NAME);
+        final MaterializedInternal<K, VR, SessionStore<Bytes, byte[]>> materializedInternal = new MaterializedInternal<>(materialized);
+        materializedInternal.generateStoreNameIfNeeded(builder, AGGREGATE_NAME);
 
         if (materializedInternal.keySerde() == null) {
             materializedInternal.withKeySerde(keySerde);
         }
 
-        return doAggregate(
-                initializer,
-                valueSerde,
-                materializedInternal
-        );
+        return doSessionAggregate(initializer,
+                sessionMerger,
+                materializedInternal.keySerde() != null ? new WindowedSerdes.SessionWindowedSerde<>(materializedInternal.keySerde()) : null,
+                materializedInternal);
     }
-    @SuppressWarnings("unchecked")
-    private <VR> KTable<K, VR> doAggregate(final Initializer<VR> initializer,
-                                           final Serde<VR> valSerde,
-                                           final MaterializedInternal<K, VR, KeyValueStore<Bytes, byte[]>> materializedInternal) {
+
+
+    private <KR, VR> KTable<KR, VR> doSessionAggregate(final Initializer<VR> initializer,
+                                                            final Merger<? super K, VR> sessionMerger,
+                                                            final Serde<KR> someKeySerde,
+                                                            final MaterializedInternal<K, VR, SessionStore<Bytes, byte[]>> materializedInternal) {
 
         final StoreBuilder<KeyValueStore<K, V>> kvsm = new KeyValueStoreMaterializer(materializedInternal).materialize();
         builder.addStateStore(kvsm);
@@ -122,7 +115,7 @@ class CogroupedKStreamImpl<K, V> implements CogroupedKStream<K, V> {
         for (final Map.Entry<KGroupedStream, Aggregator> pair : pairs.entrySet()) {
             final KGroupedStreamImpl groupedStream = (KGroupedStreamImpl) pair.getKey();
 
-            final String aggFunctionName = builder.newProcessorName(COGROUP_AGGREGATE_NAME);
+            final String aggFunctionName = builder.newProcessorName(SESSION_COGROUP_AGGREGATE_NAME);
 
             final OptimizableRepartitionNode.OptimizableRepartitionNodeBuilder<K, V> repartitionNodeBuilder = OptimizableRepartitionNode.optimizableRepartitionNodeBuilder();
 
@@ -136,7 +129,7 @@ class CogroupedKStreamImpl<K, V> implements CogroupedKStream<K, V> {
                 parentNode = repartitionNode;
             }
 
-            final KStreamAggProcessorSupplier processor = new KStreamAggregate(materializedInternal.storeName(), initializer, pair.getValue());
+            final KStreamAggProcessorSupplier processor = new KStreamSessionWindowAggregate<>(sessionWindows, materializedInternal.storeName(), initializer, pair.getValue(), sessionMerger);
 
             processorNames.add(aggFunctionName);
 
@@ -159,52 +152,25 @@ class CogroupedKStreamImpl<K, V> implements CogroupedKStream<K, V> {
             processors.add(processor);
         }
 
-//                case SESSION_WINDOW_AGGREGATE:
-//                    processor = new KStreamSessionWindowAggregate(sessionWindows, storeSupplier.name(), initializer, pair.getValue(), sessionMerger);
-//                    break;
-//                case WINDOW_AGGREGATE:
-//                    processor = new KStreamWindowAggregate(windows, storeSupplier.name(), initializer, pair.getValue());
-//                    break;
-//                default:
-//                    throw new IllegalStateException("Unrecognized AggregateType.");
-//            }
-//        }
-        final String name = newName(COGROUP_NAME);
+        final String name = newName(SESSION_COGROUP_NAME);
         final KStreamCogroupProcessorSupplier cogroup = new KStreamCogroupProcessorSupplier(processors);
         StreamsGraphNode streamsGraphNode = new CogroupedKTableNode(name, false, cogroup, processorNames, sourceNodes);
 
         //TODO - Fix the String type to be actual parent type?
         builder.addGraphNode(parentNodes, streamsGraphNode);
 
-        return new KTableImpl<K, String, VR>(name, keySerde, valSerde, sourceNodes, kvsm.name(), true, cogroup, streamsGraphNode, builder);
+        return new KTableImpl<>(name, someKeySerde, materializedInternal.valueSerde(), sourceNodes, kvsm.name(), true, cogroup, streamsGraphNode, builder);
     }
 
     private String newName(String prefix) {
         return prefix + String.format("%010d", index.getAndIncrement());
     }
 
-
-//    public SessionWindowedKStream<K, V> windowedBy(final SessionWindows windows) {
-//
-//        return new SessionWindowedCogroupedKStreamImpl(
-//                windows,
-//                builder,
-//                sourceNodes,
-//                name,
-//                keySerde,
-//                valSerde,
-//                aggregateBuilder,
-//                streamsGraphNode
-//        );
-//    }
-//
-//
-
     /**
      * @return the new sourceName if repartitioned. Otherwise the name of this stream
      */
     String repartitionIfRequired(final KGroupedStreamImpl groupedStream,
-                         final OptimizableRepartitionNode.OptimizableRepartitionNodeBuilder<K, V> optimizableRepartitionNodeBuilder) {
+                                 final OptimizableRepartitionNode.OptimizableRepartitionNodeBuilder<K, V> optimizableRepartitionNodeBuilder) {
         if (!groupedStream.isRepartitionRequired()) {
             return groupedStream.name;
         }

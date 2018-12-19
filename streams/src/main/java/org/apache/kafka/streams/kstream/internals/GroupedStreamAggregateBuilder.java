@@ -112,7 +112,6 @@ class GroupedStreamAggregateBuilder<K, V> {
     /**
      * @return the new sourceName if repartitioned. Otherwise the name of this stream
      */
-    //TODO - Bellemare - is this accessible for KIP150?
     String repartitionIfRequired(final String repartitionTopicNamePrefix,
                                          final OptimizableRepartitionNode.OptimizableRepartitionNodeBuilder<K, V> optimizableRepartitionNodeBuilder) {
         if (!repartitionRequired) {
@@ -121,10 +120,5 @@ class GroupedStreamAggregateBuilder<K, V> {
         // if repartition required the operation
         // captured needs to be set in the graph
         return KStreamImpl.createRepartitionedSource(builder, keySerde, valueSerde, repartitionTopicNamePrefix, optimizableRepartitionNodeBuilder);
-    }
-
-    //TODO - Bellemare - do I need this for KIP-150?
-    public InternalStreamsBuilder internalStreamsBuilder() {
-        return builder;
     }
 }

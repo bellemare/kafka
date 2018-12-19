@@ -24,10 +24,6 @@ public class CogroupedKTableNode<K, V> extends StreamsGraphNode {
     @Override
     public void writeToTopology(final InternalTopologyBuilder topologyBuilder) {
         final String[] processorNamesArray = processorNames.toArray(new String[processorNames.size()]);
-        System.out.println("BELLEMARE WAS HERE - processorNamesArray = ");
-        for (String s: processorNamesArray) {
-            System.out.println(s);
-        }
         topologyBuilder.addProcessor(nodeName(), cogroupProcessor, processorNamesArray);
         topologyBuilder.copartitionSources(sourceNodes);
     }
