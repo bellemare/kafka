@@ -51,4 +51,6 @@ public interface CogroupedKStream<K, V> {
                                  final Serde<VR> valueSerde,
                                  final Materialized<K, VR, KeyValueStore<Bytes, byte[]>> materialized);
 
+    SessionWindowedCogroupedKStream<K, V> windowedBy(final SessionWindows windows);
+
 }

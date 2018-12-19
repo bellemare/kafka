@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.streams.kstream;
 
+import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
@@ -85,6 +86,7 @@ public interface SessionWindowedCogroupedKStream<K, V> {
      * the latest (rolling) aggregate for each key within a window
      */
 //    <VR> KTable<Windowed<K>, VR> aggregate(final Initializer<VR> initializer,
+//                                           final Serde<VR> valSerde,
 //                                           final Merger<? super K, VR> sessionMerger);
 
     /**

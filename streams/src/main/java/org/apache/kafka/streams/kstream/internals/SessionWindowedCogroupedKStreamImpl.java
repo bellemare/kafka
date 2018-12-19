@@ -34,8 +34,11 @@ import org.apache.kafka.streams.kstream.internals.graph.ProcessorParameters;
 import org.apache.kafka.streams.kstream.internals.graph.StatefulProcessorNode;
 import org.apache.kafka.streams.kstream.internals.graph.StreamsGraphNode;
 import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.state.SessionBytesStoreSupplier;
 import org.apache.kafka.streams.state.SessionStore;
 import org.apache.kafka.streams.state.StoreBuilder;
+import org.apache.kafka.streams.state.Stores;
+import org.apache.kafka.streams.state.internals.SessionStoreBuilder;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -54,6 +57,7 @@ class SessionWindowedCogroupedKStreamImpl<K, V> implements SessionWindowedCogrou
     private final SessionWindows sessionWindows;
     private final Map<KGroupedStream, Aggregator> pairs;
     private final Serde<K> keySerde;
+    private final String name;
 
     private static final String SESSION_COGROUP_AGGREGATE_NAME = "KSTREAM-COGROUP-SESSION-AGGREGATE-";
     private static final String SESSION_COGROUP_NAME = "KSTREAM-COGROUP-SESSION-";
@@ -62,20 +66,12 @@ class SessionWindowedCogroupedKStreamImpl<K, V> implements SessionWindowedCogrou
                                                InternalStreamsBuilder builder,
                                                Map<KGroupedStream, Aggregator> pairs,
                                                String name,
-                                               Serde<K> keySerde,
-                                               Serde<V> valueSerde) {
-        /*
-        sourceNodes,
-        name,
-        keySerde,
-        valSerde,
-        streamsGraphNode
-         */
-
+                                               Serde<K> keySerde) {
         this.sessionWindows = sessionWindows;
         this.builder = builder;
         this.pairs = pairs;
         this.keySerde = keySerde;
+        this.name = name;
     }
 
     @Override
@@ -104,7 +100,8 @@ class SessionWindowedCogroupedKStreamImpl<K, V> implements SessionWindowedCogrou
                                                             final Serde<KR> someKeySerde,
                                                             final MaterializedInternal<K, VR, SessionStore<Bytes, byte[]>> materializedInternal) {
 
-        final StoreBuilder<KeyValueStore<K, V>> kvsm = new KeyValueStoreMaterializer(materializedInternal).materialize();
+
+        final StoreBuilder<SessionStore<K, VR>> kvsm = materialize(materializedInternal);
         builder.addStateStore(kvsm);
 
         final Set<String> sourceNodes = new HashSet<>();
@@ -130,7 +127,6 @@ class SessionWindowedCogroupedKStreamImpl<K, V> implements SessionWindowedCogrou
             }
 
             final KStreamAggProcessorSupplier processor = new KStreamSessionWindowAggregate<>(sessionWindows, materializedInternal.storeName(), initializer, pair.getValue(), sessionMerger);
-
             processorNames.add(aggFunctionName);
 
             final StatefulProcessorNode<K, V> statefulProcessorNode =
@@ -156,11 +152,52 @@ class SessionWindowedCogroupedKStreamImpl<K, V> implements SessionWindowedCogrou
         final KStreamCogroupProcessorSupplier cogroup = new KStreamCogroupProcessorSupplier(processors);
         StreamsGraphNode streamsGraphNode = new CogroupedKTableNode(name, false, cogroup, processorNames, sourceNodes);
 
-        //TODO - Fix the String type to be actual parent type?
         builder.addGraphNode(parentNodes, streamsGraphNode);
-
         return new KTableImpl<>(name, someKeySerde, materializedInternal.valueSerde(), sourceNodes, kvsm.name(), true, cogroup, streamsGraphNode, builder);
     }
+
+
+
+    private <VR> StoreBuilder<SessionStore<K, VR>> materialize(final MaterializedInternal<K, VR, SessionStore<Bytes, byte[]>> materialized) {
+        SessionBytesStoreSupplier supplier = (SessionBytesStoreSupplier) materialized.storeSupplier();
+        if (supplier == null) {
+            // NOTE: in the future, when we remove Windows#maintainMs(), we should set the default retention
+            // to be (windows.inactivityGap() + windows.grace()). This will yield the same default behavior.
+            final long retentionPeriod = materialized.retention() != null ? materialized.retention().toMillis() : sessionWindows.maintainMs();
+
+            if ((sessionWindows.inactivityGap() + sessionWindows.gracePeriodMs()) > retentionPeriod) {
+                throw new IllegalArgumentException("The retention period of the session store "
+                        + materialized.storeName()
+                        + " must be no smaller than the session inactivity gap plus the"
+                        + " grace period."
+                        + " Got gap=[" + sessionWindows.inactivityGap() + "],"
+                        + " grace=[" + sessionWindows.gracePeriodMs() + "],"
+                        + " retention=[" + retentionPeriod + "]");
+            }
+            supplier = Stores.persistentSessionStore(
+                    materialized.storeName(),
+                    retentionPeriod
+            );
+        }
+        final StoreBuilder<SessionStore<K, VR>> builder = Stores.sessionStoreBuilder(
+                supplier,
+                materialized.keySerde(),
+                materialized.valueSerde()
+        );
+
+        if (materialized.loggingEnabled()) {
+            builder.withLoggingEnabled(materialized.logConfig());
+        } else {
+            builder.withLoggingDisabled();
+        }
+
+        if (materialized.cachingEnabled()) {
+            builder.withCachingEnabled();
+        }
+        return builder;
+    }
+
+
 
     private String newName(String prefix) {
         return prefix + String.format("%010d", index.getAndIncrement());

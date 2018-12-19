@@ -99,4 +99,6 @@ class KGroupedStream[K, V](val inner: KGroupedStreamJ[K, V]) {
    */
   def windowedBy[W <: Window](windows: Windows[W]): TimeWindowedKStream[K, V] =
     inner.windowedBy(windows)
+
+  def cogroup[VR](aggregator: (K, V, VR) => VR): CogroupedKStream[K, VR] = inner.cogroup(aggregator.asAggregator)
 }

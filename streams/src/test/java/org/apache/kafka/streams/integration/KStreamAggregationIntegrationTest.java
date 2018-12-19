@@ -624,6 +624,7 @@ public class KStreamAggregationIntegrationTest {
                 .reduce((value1, value2) -> value1 + ":" + value2, Materialized.as(userSessionsStore))
                 .toStream()
                 .foreach((key, value) -> {
+                    System.out.println("bellemare = " + key.key() + "@" + key.window().start() + "->" + key.window().end() +", " + "value= " + value);
                     results.put(key, value);
                     latch.countDown();
                 });

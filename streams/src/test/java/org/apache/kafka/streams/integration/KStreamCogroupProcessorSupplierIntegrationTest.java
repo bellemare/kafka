@@ -15,8 +15,11 @@
  * limitations under the License.
  */
 package org.apache.kafka.streams.integration;
+import static java.time.Duration.ofMillis;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
+
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
@@ -28,9 +31,12 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.LongDeserializer;
 import org.apache.kafka.common.serialization.LongSerializer;
+import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.utils.Bytes;
+import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -44,7 +50,14 @@ import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.KeyValueMapper;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Merger;
+import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.kstream.SessionWindowedDeserializer;
+import org.apache.kafka.streams.kstream.SessionWindows;
 import org.apache.kafka.streams.kstream.ValueJoiner;
+import org.apache.kafka.streams.kstream.Windowed;
+import org.apache.kafka.streams.kstream.WindowedSerdes;
+import org.apache.kafka.streams.state.SessionStore;
+import org.apache.kafka.streams.state.internals.WindowKeySchema;
 import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
 import org.junit.BeforeClass;
@@ -102,9 +115,11 @@ public class KStreamCogroupProcessorSupplierIntegrationTest {
     private static final Merger<Long, String> MERGER = new Merger<Long, String>() {
         @Override
         public String apply(Long aggKey, String aggOne, String aggTwo) {
-            return aggOne + aggTwo;
+            //Throw away the old aggregate. We do not care about it.
+            return aggTwo;
         }
     };
+
     private static final Properties PRODUCER_CONFIG = new Properties();
     private static final Properties CONSUMER_CONFIG = new Properties();
     private static final Properties STREAMS_CONFIG = new Properties();
@@ -128,6 +143,29 @@ public class KStreamCogroupProcessorSupplierIntegrationTest {
             new Input<>(INPUT_TOPIC_2, 18L, new KeyValue<>(2L, "c")),
             new Input<>(INPUT_TOPIC_3, 18L, new KeyValue<>(1L, "c"))
     );
+
+    private static final List<Input<Long, String>> SESSION_INPUTS = Arrays.asList(
+            new Input<>(INPUT_TOPIC_1, 10L, new KeyValue<>(1L, "a")),
+            new Input<>(INPUT_TOPIC_2, 10L, new KeyValue<>(2L, "a")),
+            new Input<>(INPUT_TOPIC_3, 11L, new KeyValue<>(1L, "a")),
+            new Input<>(INPUT_TOPIC_1, 1100L, new KeyValue<>(1L, "b")),
+            new Input<>(INPUT_TOPIC_2, 1200L, new KeyValue<>(2L, "b")),
+            new Input<>(INPUT_TOPIC_3, 1200L, new KeyValue<>(1L, "b")),
+            new Input<>(INPUT_TOPIC_1, 2000L, new KeyValue<>(2L, "c")),
+            new Input<>(INPUT_TOPIC_2, 2000L, new KeyValue<>(1L, "c"))
+//            ,
+//            new Input<>(INPUT_TOPIC_3, 2100L, new KeyValue<>(2L, "c")),
+//            new Input<>(INPUT_TOPIC_1, 21000L, new KeyValue<>(2L, "a")),
+//            new Input<>(INPUT_TOPIC_2, 22000L, new KeyValue<>(1L, "a")),
+//            new Input<>(INPUT_TOPIC_3, 22000L, new KeyValue<>(2L, "a")),
+//            new Input<>(INPUT_TOPIC_1, 160000L, new KeyValue<>(2L, "b")),
+//            new Input<>(INPUT_TOPIC_2, 160000L, new KeyValue<>(1L, "b")),
+//            new Input<>(INPUT_TOPIC_3, 170000L, new KeyValue<>(2L, "b")),
+//            new Input<>(INPUT_TOPIC_1, 1700000L, new KeyValue<>(1L, "c")),
+//            new Input<>(INPUT_TOPIC_2, 1800000L, new KeyValue<>(2L, "c")),
+//            new Input<>(INPUT_TOPIC_3, 1800000L, new KeyValue<>(1L, "c"))
+    );
+
     @BeforeClass
     public static void setupConfigs() throws Exception {
         PRODUCER_CONFIG.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
@@ -146,6 +184,90 @@ public class KStreamCogroupProcessorSupplierIntegrationTest {
         STREAMS_CONFIG.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
         STREAMS_CONFIG.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0);
     }
+
+
+    @Test
+    public void testSessionCogroup() throws InterruptedException, ExecutionException {
+        final int testNumber = TEST_NUMBER.getAndIncrement();
+        final Properties producerConfig = producerConfig();
+        final Properties consumerConfig = consumerConfig("consumer-" + testNumber);
+
+        consumerConfig.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        consumerConfig.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+
+
+        CLUSTER.createTopic(INPUT_TOPIC_1 + testNumber, 2, 1);
+        CLUSTER.createTopic(INPUT_TOPIC_2 + testNumber, 2, 1);
+        CLUSTER.createTopic(INPUT_TOPIC_3 + testNumber, 2, 1);
+        CLUSTER.createTopic(OUTPUT_TOPIC + testNumber, 2, 1);
+        final StreamsBuilder builder = new StreamsBuilder();
+        KGroupedStream<Long, String> stream1 = builder.<Long, String>stream(INPUT_TOPIC_1 + testNumber).groupByKey();
+        KGroupedStream<Long, String> stream2 = builder.<Long, String>stream(INPUT_TOPIC_2 + testNumber).groupByKey();
+        KGroupedStream<Long, String> stream3 = builder.<Long, String>stream(INPUT_TOPIC_3 + testNumber).groupByKey();
+
+        Serde longWindowedSerde = WindowedSerdes.sessionWindowedSerdeFrom(Long.class);
+
+        Serde<Long> ll = Serdes.Long();
+
+        stream1.cogroup(AGGREGATOR_1)
+                .cogroup(stream2, AGGREGATOR_2)
+                .cogroup(stream3, AGGREGATOR_3)
+                .windowedBy(SessionWindows.with(ofMillis(1000L)))
+                .aggregate(INITIALIZER, MERGER, Materialized.as("SESSION_STORE_NAME"))
+                .toStream()
+                .map((key, value) -> new KeyValue<>(key.key() + "@" + key.window().start() + "->" + key.window().end(), value))
+                // write to play-events-per-session topic
+                .to(OUTPUT_TOPIC + testNumber, Produced.with(Serdes.String(), Serdes.String()));
+
+        final KafkaStreams streams = new KafkaStreams(builder.build(), streamsConfig(APP_ID + testNumber));
+
+        final List<KeyValue<Long, String>> expecteds = Arrays.asList(
+                KeyValue.pair(1L, "1a"),
+                KeyValue.pair(2L, "2a"),
+                KeyValue.pair(1L, "1a3a"),
+                KeyValue.pair(1L, "1a3a1b"),
+                KeyValue.pair(2L, "2a2b"),
+                KeyValue.pair(1L, "1a3a1b3b"),
+                KeyValue.pair(2L, "2a2b1c"),
+                KeyValue.pair(1L, "1a3a1b3b2c"),
+                KeyValue.pair(2L, "2a2b1c3c"),
+                KeyValue.pair(2L, "2a2b1c3c1a"),
+                KeyValue.pair(1L, "1a3a1b3b2c2a"),
+                KeyValue.pair(2L, "2a2b1c3c1a3a"),
+                KeyValue.pair(2L, "2a2b1c3c1a3a1b"),
+                KeyValue.pair(1L, "1a3a1b3b2c2a2b"),
+                KeyValue.pair(2L, "2a2b1c3c1a3a1b3b"),
+                KeyValue.pair(1L, "1a3a1b3b2c2a2b1c"),
+                KeyValue.pair(2L, "2a2b1c3c1a3a1b3b2c"),
+                KeyValue.pair(1L, "1a3a1b3b2c2a2b1c3c")
+        );
+
+        ArrayList<String> outputResults = new ArrayList<String>();
+
+
+        try {
+            streams.start();
+            final Iterator<KeyValue<Long, String>> expectedsIterator = expecteds.iterator();
+            for (final Input<Long, String> input : SESSION_INPUTS) {
+                IntegrationTestUtils.produceKeyValuesSynchronouslyWithTimestamp(input.topic + testNumber, Collections.singleton(input.keyValue), producerConfig, input.timestamp);
+                List<KeyValue<String, String>> outputs = IntegrationTestUtils.waitUntilMinKeyValueRecordsReceived(consumerConfig, OUTPUT_TOPIC + testNumber, 1);
+
+                for (KeyValue<String, String> elem: outputs) {
+                    outputResults.add("bellemare= " + elem);
+                }
+                //assertThat(outputs.get(0), equalTo(expectedsIterator.next()));
+            }
+        } finally {
+            for (String foo: outputResults) {
+                System.out.println(foo);
+            }
+
+            streams.close();
+        }
+    }
+
+
+
     @Test
     public void testCogroup() throws InterruptedException, ExecutionException {
         final int testNumber = TEST_NUMBER.getAndIncrement();

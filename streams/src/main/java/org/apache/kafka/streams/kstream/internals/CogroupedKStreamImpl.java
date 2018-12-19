@@ -34,6 +34,7 @@ import org.apache.kafka.streams.kstream.KGroupedStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Merger;
+import org.apache.kafka.streams.kstream.SessionWindowedCogroupedKStream;
 import org.apache.kafka.streams.kstream.SessionWindowedKStream;
 import org.apache.kafka.streams.kstream.SessionWindows;
 import org.apache.kafka.streams.kstream.Windowed;
@@ -47,7 +48,6 @@ import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.SessionStore;
 import org.apache.kafka.streams.state.StoreBuilder;
 
-import static org.apache.kafka.streams.kstream.internals.KGroupedStreamImpl.AGGREGATE_NAME;
 
 class CogroupedKStreamImpl<K, V> implements CogroupedKStream<K, V> {
     private final AtomicInteger index = new AtomicInteger(0);
@@ -183,22 +183,17 @@ class CogroupedKStreamImpl<K, V> implements CogroupedKStream<K, V> {
         return prefix + String.format("%010d", index.getAndIncrement());
     }
 
+    @Override
+    public SessionWindowedCogroupedKStream<K, V> windowedBy(final SessionWindows windows) {
 
-//    public SessionWindowedKStream<K, V> windowedBy(final SessionWindows windows) {
-//
-//        return new SessionWindowedCogroupedKStreamImpl(
-//                windows,
-//                builder,
-//                sourceNodes,
-//                name,
-//                keySerde,
-//                valSerde,
-//                aggregateBuilder,
-//                streamsGraphNode
-//        );
-//    }
-//
-//
+        return new SessionWindowedCogroupedKStreamImpl<>(
+                windows,
+                builder,
+                pairs,
+                "someName",
+                keySerde
+        );
+    }
 
     /**
      * @return the new sourceName if repartitioned. Otherwise the name of this stream
