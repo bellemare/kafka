@@ -37,7 +37,7 @@ class GroupedStreamAggregateBuilder<K, V> {
     private final Serde<V> valueSerde;
     private final boolean repartitionRequired;
     private final String userName;
-    private final Set<String> sourceNodes;
+    private Set<String> sourceNodes;
     private final String name;
     private final StreamsGraphNode streamsGraphNode;
 
@@ -95,10 +95,12 @@ class GroupedStreamAggregateBuilder<K, V> {
 
         builder.addGraphNode(parentNode, statefulProcessorNode);
 
+        sourceNodes = sourceName.equals(this.name) ? sourceNodes : Collections.singleton(sourceName);
+
         return new KTableImpl<>(aggFunctionName,
                                 keySerde,
                                 valSerde,
-                                sourceName.equals(this.name) ? sourceNodes : Collections.singleton(sourceName),
+                                sourceNodes,
                                 storeBuilder.name(),
                                 isQueryable,
                                 aggregateSupplier,
@@ -110,7 +112,8 @@ class GroupedStreamAggregateBuilder<K, V> {
     /**
      * @return the new sourceName if repartitioned. Otherwise the name of this stream
      */
-    private String repartitionIfRequired(final String repartitionTopicNamePrefix,
+    //TODO - Bellemare - is this accessible for KIP150?
+    String repartitionIfRequired(final String repartitionTopicNamePrefix,
                                          final OptimizableRepartitionNode.OptimizableRepartitionNodeBuilder<K, V> optimizableRepartitionNodeBuilder) {
         if (!repartitionRequired) {
             return this.name;
@@ -118,6 +121,10 @@ class GroupedStreamAggregateBuilder<K, V> {
         // if repartition required the operation
         // captured needs to be set in the graph
         return KStreamImpl.createRepartitionedSource(builder, keySerde, valueSerde, repartitionTopicNamePrefix, optimizableRepartitionNodeBuilder);
+    }
 
+    //TODO - Bellemare - do I need this for KIP-150?
+    public InternalStreamsBuilder internalStreamsBuilder() {
+        return builder;
     }
 }

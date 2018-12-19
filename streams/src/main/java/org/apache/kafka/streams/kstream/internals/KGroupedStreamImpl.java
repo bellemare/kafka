@@ -19,6 +19,7 @@ package org.apache.kafka.streams.kstream.internals;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.kstream.Aggregator;
+import org.apache.kafka.streams.kstream.CogroupedKStream;
 import org.apache.kafka.streams.kstream.Initializer;
 import org.apache.kafka.streams.kstream.KGroupedStream;
 import org.apache.kafka.streams.kstream.KTable;
@@ -29,6 +30,7 @@ import org.apache.kafka.streams.kstream.SessionWindows;
 import org.apache.kafka.streams.kstream.TimeWindowedKStream;
 import org.apache.kafka.streams.kstream.Window;
 import org.apache.kafka.streams.kstream.Windows;
+import org.apache.kafka.streams.kstream.internals.graph.OptimizableRepartitionNode;
 import org.apache.kafka.streams.kstream.internals.graph.StreamsGraphNode;
 import org.apache.kafka.streams.state.KeyValueStore;
 
@@ -192,5 +194,15 @@ class KGroupedStreamImpl<K, V> extends AbstractStream<K, V> implements KGroupedS
             materializedInternal.isQueryable(),
             materializedInternal.keySerde(),
             materializedInternal.valueSerde());
+    }
+
+    @Override
+    public <VR> CogroupedKStream<K, VR> cogroup(final Aggregator<? super K, ? super V, VR> aggregator) {
+        Objects.requireNonNull(aggregator, "aggregator should not be null");
+        return new CogroupedKStreamImpl<>(builder, this, keySerde, aggregator);
+    }
+
+    public boolean isRepartitionRequired() {
+        return this.repartitionRequired;
     }
 }
