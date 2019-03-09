@@ -20,7 +20,7 @@
 package org.apache.kafka.streams.scala.kstream
 
 import org.apache.kafka.common.utils.Bytes
-import org.apache.kafka.streams.kstream.{KTable, Materialized, SessionWindowedCogroupedKStream => SessionWindowedCogroupedKStreamJ, _}
+import org.apache.kafka.streams.kstream.{SessionWindowedCogroupedKStream => SessionWindowedCogroupedKStreamJ, _}
 import org.apache.kafka.streams.scala.ImplicitConversions._
 import org.apache.kafka.streams.state.SessionStore
 
@@ -36,5 +36,4 @@ import org.apache.kafka.streams.state.SessionStore
 class SessionWindowedCogroupedKStream[K, V](val inner: SessionWindowedCogroupedKStreamJ[K, V]) {
   def aggregate[VR](initializer: Initializer[VR], sessionMerger: Merger[_ >: K, VR], materialized: Materialized[K, VR, SessionStore[Bytes, Array[Byte]]]): KTable[Windowed[K], VR] =
     inner.aggregate(initializer, sessionMerger, materialized)
-
 }

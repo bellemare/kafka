@@ -35,8 +35,7 @@ import org.apache.kafka.streams.state.KeyValueStore
  * @see `org.apache.kafka.streams.kstream.KGroupedStream`
  */
 class CogroupedKGroupedStream[K, V](val inner: CogroupedKStreamJ[K, V]) {
-
-  def cogroup[T](groupedStream: KGroupedStream[K, T], aggregator: Aggregator[_ >: K, _ >: T, V]): CogroupedKStreamJ[K, V] =
+  def cogroup[T](groupedStream: KGroupedStream[K, T], aggregator: Aggregator[K, T, V]): CogroupedKStreamJ[K, V] =
     inner.cogroup(groupedStream, aggregator)
 
   def aggregate[VR](initializer: Initializer[VR], valueSerde: Serde[VR]): KTable[K, VR] =
@@ -47,5 +46,4 @@ class CogroupedKGroupedStream[K, V](val inner: CogroupedKStreamJ[K, V]) {
 
   def windowedBy(windows: SessionWindows): SessionWindowedCogroupedKStream[K, V] =
     inner.windowedBy(windows)
-
 }

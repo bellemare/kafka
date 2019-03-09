@@ -205,18 +205,14 @@ public class KStreamCogroupProcessorSupplierIntegrationTest {
         KGroupedStream<Long, String> stream2 = builder.<Long, String>stream(INPUT_TOPIC_2 + testNumber).groupByKey();
         KGroupedStream<Long, String> stream3 = builder.<Long, String>stream(INPUT_TOPIC_3 + testNumber).groupByKey();
 
-        Serde longWindowedSerde = WindowedSerdes.sessionWindowedSerdeFrom(Long.class);
-
-        Serde<Long> ll = Serdes.Long();
-
         stream1.cogroup(AGGREGATOR_1)
                 .cogroup(stream2, AGGREGATOR_2)
                 .cogroup(stream3, AGGREGATOR_3)
                 .windowedBy(SessionWindows.with(ofMillis(1000L)))
                 .aggregate(INITIALIZER, MERGER, Materialized.as("SESSION_STORE_NAME"))
                 .toStream()
-                .map((key, value) -> new KeyValue<>(key.key() + "@" + key.window().start() + "->" + key.window().end(), value))
-                // write to play-events-per-session topic
+                .map((key, value) ->
+                        new KeyValue<>(key.key() + "@" + key.window().start() + "->" + key.window().end(), value))
                 .to(OUTPUT_TOPIC + testNumber, Produced.with(Serdes.String(), Serdes.String()));
 
         final KafkaStreams streams = new KafkaStreams(builder.build(), streamsConfig(APP_ID + testNumber));
