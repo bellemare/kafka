@@ -28,27 +28,24 @@ import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
 
-public class ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO, VR>
-        implements ProcessorSupplier<CombinedKey<KO, K>, V> {
+public class ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO>
+        implements ProcessorSupplier<CombinedKey<KO, K>, SubscriptionWrapper> {
 
     private final String topicName;
     private final KTableValueGetterSupplier<KO, VO> foreignValueGetterSupplier;
-    private final ValueJoiner<V, VO, VR> joiner;
 
     public ForeignKeySingleLookupProcessorSupplier(final String topicName,
-                                                   final KTableValueGetterSupplier<KO, VO> foreignValueGetter,
-                                                   final ValueJoiner<V, VO, VR> joiner) {
+                                                   final KTableValueGetterSupplier<KO, VO> foreignValueGetter) {
         this.topicName = topicName;
-        this.joiner = joiner;
         this.foreignValueGetterSupplier = foreignValueGetter;
     }
 
     @Override
-    public Processor<CombinedKey<KO, K>, V> get() {
+    public Processor<CombinedKey<KO, K>, SubscriptionWrapper> get() {
 
-        return new AbstractProcessor<CombinedKey<KO, K>, V>() {
+        return new AbstractProcessor<CombinedKey<KO, K>, SubscriptionWrapper>() {
 
-            private KeyValueStore<CombinedKey<KO, K>, V> store;
+            private KeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper> store;
             private KTableValueGetter<KO, VO> foreignValues;
 
             @Override
@@ -56,31 +53,32 @@ public class ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO, VR>
                 super.init(context);
                 foreignValues = foreignValueGetterSupplier.get();
                 foreignValues.init(context);
-                store = (KeyValueStore<CombinedKey<KO, K>, V>) context.getStateStore(topicName);
+                store = (KeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper>) context.getStateStore(topicName);
             }
 
             @Override
-            public void process(final CombinedKey<KO, K> key, final V value) {
+            public void process(final CombinedKey<KO, K> key, final SubscriptionWrapper value) {
                 VO foreignValue = foreignValues.get(key.getForeignKey());
 
-                if (value == null) {
+                //TODO - Bellemare - If the subscriptionWrapper indicates a null, must delete.
+                if (value.getHash() == null) {
                     store.delete(key);
                 } else {
                     store.put(key, value);
                 }
 
-                if (value != null && foreignValue != null) {
-                    final VR newJoined = joiner.apply(value, foreignValue);
-                    context().forward(key, newJoined);
-                } else if (value == null) {
-                    context().forward(key, null);
+                //What to do if the foreign key actually is null? Can't partition correctly...
+                if ((value.getHash() != null && foreignValue != null) ||
+                    (value.getHash() == null && value.isPropagate())) {
+                    final SubscriptionResponseWrapper<VO> newValue = new SubscriptionResponseWrapper<>(value.getHash(), foreignValue);
+                    context().forward(key.getPrimaryKey(), newValue);
                 }
             }
         };
     }
 
 
-    public KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> valueGetterSupplier() {
+    public KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, SubscriptionWrapper> valueGetterSupplier() {
         return new KTableSourceValueGetterSupplier<>(topicName);
     }
 }

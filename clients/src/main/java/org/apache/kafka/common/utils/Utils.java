@@ -43,6 +43,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -415,6 +416,17 @@ public final class Utils {
         h ^= h >>> 15;
 
         return h;
+    }
+
+    /**
+     * Generates an md5 hash from the byte array
+     * @param data byte array to hash
+     * @return 128 bit hash of the given array
+     * @throws java.security.NoSuchAlgorithmException
+     */
+    public static byte[] md5(final byte[] data) throws java.security.NoSuchAlgorithmException {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        return md.digest(data);
     }
 
     /**

@@ -17,6 +17,8 @@
 
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
+import org.apache.kafka.common.serialization.Serializer;
+import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.processor.AbstractProcessor;
@@ -24,12 +26,17 @@ import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 
+import java.security.NoSuchAlgorithmException;
+
 public class KTableRepartitionerProcessorSupplier<K, KO, V> implements ProcessorSupplier<K, Change<V>> {
 
     private final ValueMapper<V, KO> mapper;
+    private final Serializer<V> valueSerializer;
 
-    public KTableRepartitionerProcessorSupplier(final ValueMapper<V, KO> extractor) {
+    public KTableRepartitionerProcessorSupplier(final ValueMapper<V, KO> extractor,
+                                                final Serializer<V> valueSerializer) {
         this.mapper = extractor;
+        this.valueSerializer = valueSerializer;
     }
 
     @Override
@@ -46,6 +53,23 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
 
         @Override
         public void process(final K key, final Change<V> change) {
+            byte[] hash = null;
+            byte[] nullHash = null;
+
+            try {
+                //TODO- Bellemare - fix this jank.
+                nullHash = Utils.md5(new byte[]{});
+                if (change.newValue == null)
+                    //TODO - Bellemare - do I want to do this? Or do I need a flag in case I get a collision with the empty array?
+                    hash = Utils.md5(new byte[]{}); //Use an empty array to represent nulls. MD5 hash fails otherwise.
+                else
+                    hash = Utils.md5(valueSerializer.serialize(null, change.newValue));
+            } catch (NoSuchAlgorithmException e) {
+                System.out.println("FATAL ERROR USING MD5 HASH");
+                System.exit(-1);
+                //TODO - Bellemare - figure out what to do with this.
+            }
+
             if (change.oldValue != null) {
                 final KO oldForeignKey = mapper.apply(change.oldValue);
                 final CombinedKey<KO, K> combinedOldKey = new CombinedKey<>(oldForeignKey, key);
@@ -56,23 +80,22 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
                     //Requires equal to be defined...
                     if (oldForeignKey.equals(extractedNewForeignKey)) {
                         //Same foreign key. Just propagate onwards.
-                        context().forward(combinedNewKey, change.newValue);
+                        context().forward(combinedNewKey, new SubscriptionWrapper(hash, true));
                     } else {
                         //Different Foreign Key - delete the old key value and propagate the new one.
-                        //Note that we indicate that we don't want to propagate the delete to the join output. It is set to false.
-                        //This will be used by a downstream processor to delete it from the local state store, but not propagate it
-                        //as a full delete. This avoids a race condition in the resolution of the output.
-                        //Don't need to send a value, as this only indicates a delete.
-                        context().forward(combinedOldKey, null);
-                        context().forward(combinedNewKey, change.newValue);
+                        //Note that we indicate that we don't want to propagate the delete to the join output.
+                        //The downstream processor to delete it from the local state store, but not propagate it.
+                        context().forward(combinedOldKey, new SubscriptionWrapper(nullHash, false));
+                        context().forward(combinedNewKey, new SubscriptionWrapper(hash, true));
                     }
                 } else {
-                    context().forward(combinedOldKey, null);
+                    //A propagatable delete. Set hash to null instead of using the null hash code.
+                    context().forward(combinedOldKey, new SubscriptionWrapper(nullHash, true));
                 }
             } else if (change.newValue != null) {
                 final KO extractedForeignKeyValue = mapper.apply(change.newValue);
                 final CombinedKey<KO, K> newCombinedKeyValue = new CombinedKey<>(extractedForeignKeyValue, key);
-                context().forward(newCombinedKeyValue, change.newValue);
+                context().forward(newCombinedKeyValue, new SubscriptionWrapper(hash, true));
             }
         }
 

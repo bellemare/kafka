@@ -37,9 +37,17 @@ import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKey;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.DefaultCombinedKeyPartitioner;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKeySerde;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.ForeignKeySingleLookupProcessorSupplier;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableKTablePrefixScanJoin;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableKTablePrefixScanProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableRepartitionerProcessorSupplier;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SourceResolverProcessorSupplier;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SourceResolverJoinProcessorSupplier;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapper;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperDeserializer;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperSerde;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperSerializer;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperDeserializer;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerde;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerializer;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableForeignKeyJoinResolutionNode;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableJoinNode;
 import org.apache.kafka.streams.kstream.internals.graph.OptimizableRepartitionNode;
@@ -690,7 +698,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
 
         // repartition original => intermediate topic
         final KTableRepartitionerProcessorSupplier<K, KO, V> repartitionProcessor =
-                new KTableRepartitionerProcessorSupplier<>(foreignKeyExtractor);
+                new KTableRepartitionerProcessorSupplier<>(foreignKeyExtractor, this.valSerde.serializer());
 
         final CombinedKeySerde<KO, K> combinedKeySerde = new CombinedKeySerde<>(((KTableImpl<KO, VO, ?>) other).keySerde(), this.keySerde());
 
@@ -704,25 +712,25 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final String joinByPrefixName = builder.newProcessorName(BY_PREFIX);
 
         final String thisStateStoreName = builder.newStoreName(STATE_STORE_NAME);
-        final ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO, VR> joinOneToOne =
-                new ForeignKeySingleLookupProcessorSupplier<>(thisStateStoreName, ((KTableImpl<KO, VO, VO>) other).valueGetterSupplier(), joiner);
+        final ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO> joinOneToOne =
+                new ForeignKeySingleLookupProcessorSupplier<>(thisStateStoreName, ((KTableImpl<KO, VO, VO>) other).valueGetterSupplier());
 
         final KeyValueBytesStoreSupplier thisRocksDBRef = new RocksDbKeyValueBytesStoreSupplier(thisStateStoreName);
         final StateStore prefixScannableDBRef = thisRocksDBRef.get();
-        final Materialized<CombinedKey<KO, K>, V, KeyValueStore<Bytes, byte[]>> foreignMaterialized =
-                Materialized.<CombinedKey<KO, K>, V, KeyValueStore<Bytes, byte[]>>as(prefixScannableDBRef.name())
+        final Materialized<CombinedKey<KO, K>, SubscriptionWrapper, KeyValueStore<Bytes, byte[]>> foreignMaterialized =
+                Materialized.<CombinedKey<KO, K>, SubscriptionWrapper, KeyValueStore<Bytes, byte[]>>as(prefixScannableDBRef.name())
                 //Need all values to be immediately available in the rocksDB store.
                 //No easy way to flush cache prior to prefixScan, so caching is disabled on this store.
                 .withCachingDisabled()
                 .withKeySerde(combinedKeySerde)
-                .withValueSerde(this.valueSerde());
-        final MaterializedInternal<CombinedKey<KO, K>, V, KeyValueStore<Bytes, byte[]>> repartitionedPrefixScannableStore =
+                .withValueSerde(new SubscriptionWrapperSerde());
+        final MaterializedInternal<CombinedKey<KO, K>, SubscriptionWrapper, KeyValueStore<Bytes, byte[]>> repartitionedPrefixScannableStore =
                 new MaterializedInternal<>(foreignMaterialized);
 
         //Performs foreign-key-driven updates (ie: new One, updates the Many).
-        final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, V> oneToOneProcessor = joinOneToOne.valueGetterSupplier();
+        final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, SubscriptionWrapper> oneToOneProcessor = joinOneToOne.valueGetterSupplier();
         final ProcessorSupplier<KO, Change<VO>> joinByPrefix =
-                new KTableKTablePrefixScanJoin<>(oneToOneProcessor, joiner, prefixScannableDBRef);
+                new KTableKTablePrefixScanProcessorSupplier<>(oneToOneProcessor);
 
         //Need to write all updates to a given K back to the same partition, as at this point in the topology
         //everything is partitioned on KO from the previous repartition step.
@@ -733,7 +741,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final String finalRepartitionSinkName = builder.newProcessorName(SINK_NAME + finalRepartitionerName);
 
         //Create the processor to resolve the propagation wrappers against the highwater mark for a given K.
-        final SourceResolverProcessorSupplier<K, KO, V, VR> resolverProcessor = new SourceResolverProcessorSupplier<>(this.queryableStoreName, foreignKeyExtractor);
+        final SourceResolverJoinProcessorSupplier<K, V, VO, VR> resolverProcessor = new SourceResolverJoinProcessorSupplier<>(this.queryableStoreName, this.valueSerde().serializer(), joiner);
         final String resolverProcessorName = builder.newProcessorName(KTableImpl.SOURCE_NAME);
 
         final KTableSource<K, VR> outputProcessor = new KTableSource<>(materialized.storeName());
@@ -751,7 +759,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 repartitionProcessorName
         );
 
-        final ProcessorParameters<CombinedKey<KO, K>, V> joinOneToOneProcessorParameters = new ProcessorParameters<>(
+        final ProcessorParameters<CombinedKey<KO, K>, SubscriptionWrapper> joinOneToOneProcessorParameters = new ProcessorParameters<>(
                 joinOneToOne,
                 joinOneToOneName
         );
@@ -761,7 +769,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 joinByPrefixName
         );
 
-        final ProcessorParameters<CombinedKey<KO, K>, VR> resolverProcessorParameters = new ProcessorParameters<>(
+        final ProcessorParameters<K, SubscriptionResponseWrapper<VO>> resolverProcessorParameters = new ProcessorParameters<>(
                 resolverProcessor,
                 resolverProcessorName
         );
@@ -771,7 +779,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 outputProcessorName
         );
 
-        final KTableKTableForeignKeyJoinResolutionNode fkSinkAndResolveNode = new KTableKTableForeignKeyJoinResolutionNode<>(
+        final KTableKTableForeignKeyJoinResolutionNode fkSinkAndResolveNode = new KTableKTableForeignKeyJoinResolutionNode<VR, K, V, KO, VO>(
                 resolverProcessorParameters.processorName(),
                 joinOneToOneProcessorParameters,
                 joinByPrefixProcessorParameters,
@@ -779,8 +787,11 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 finalRepartitionTopicName,
                 finalRepartitionSinkName,
                 finalRepartitionSourceName,
-                combinedKeySerde,
-                materialized.valueSerde(),
+                this.keySerde,
+                new SubscriptionResponseWrapperSerde<>(
+                        new SubscriptionResponseWrapperSerializer<>(((KTableImpl<KO, VO, VO>) other).valSerde.serializer()),
+                        new SubscriptionResponseWrapperDeserializer<>(((KTableImpl<KO, VO, VO>) other).valSerde.deserializer())
+                ),
                 this.valueGetterSupplier()
                 );
 
@@ -793,7 +804,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 .withSinkName(repartitionSinkName)
                 .withSourceName(repartitionSourceName)
                 .withRepartitionTopic(repartitionTopicName)
-                .withValueSerde(this.valueSerde())
+                .withValueSerde(new SubscriptionWrapperSerde())
                 .withPartitioner(partitioner)
                 .withKeySerde(combinedKeySerde)
                 .build();
