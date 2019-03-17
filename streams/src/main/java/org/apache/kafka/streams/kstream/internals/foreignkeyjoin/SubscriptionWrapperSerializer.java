@@ -11,20 +11,22 @@ public class SubscriptionWrapperSerializer implements Serializer<SubscriptionWra
 
     @Override
     public void configure(Map configs, boolean isKey) {
-        //Don't need to configure, they are already configured. This is just a wrapper.
+        //Do nothing
     }
 
     @Override
     public byte[] serialize(String topic, SubscriptionWrapper data) {
         //{16-bytes Hash}{1-byte boolean propagate}
         final ByteBuffer buf = ByteBuffer.allocate(17);
-        buf.put(data.getHash());
+        long[] elem = data.getHash();
+        buf.putLong(elem[0]);
+        buf.putLong(elem[1]);
         buf.put((byte) (data.isPropagate() ? 1 : 0 ));
         return buf.array();
     }
 
     @Override
     public void close() {
-
+        //Do nothing
     }
 }

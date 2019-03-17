@@ -1,10 +1,10 @@
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 public class SubscriptionResponseWrapper<FV> {
-    private byte[] originalValueHash;
+    private long[] originalValueHash;
     private FV foreignValue;
 
-    SubscriptionResponseWrapper(byte[] originalValueHash, FV foreignValue) {
+    SubscriptionResponseWrapper(long[] originalValueHash, FV foreignValue) {
         this.originalValueHash = originalValueHash;
         this.foreignValue = foreignValue;
     }
@@ -13,7 +13,7 @@ public class SubscriptionResponseWrapper<FV> {
         return foreignValue;
     }
 
-    public byte[] getOriginalValueHash() {
+    public long[] getOriginalValueHash() {
         return originalValueHash;
     }
 }

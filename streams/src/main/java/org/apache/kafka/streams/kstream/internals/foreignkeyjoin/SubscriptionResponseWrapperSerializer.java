@@ -14,7 +14,7 @@ public class SubscriptionResponseWrapperSerializer<V> implements Serializer<Subs
 
     @Override
     public void configure(Map configs, boolean isKey) {
-        //Don't need to configure, they are already configured. This is just a wrapper.
+        //Do nothing
     }
 
     @Override
@@ -22,13 +22,15 @@ public class SubscriptionResponseWrapperSerializer<V> implements Serializer<Subs
         //{16-bytes Hash}{n-bytes serialized data}
         byte[] serializedData = serializer.serialize(null, data.getForeignValue());
         final ByteBuffer buf = ByteBuffer.allocate(16 + serializedData.length);
-        buf.put(data.getOriginalValueHash());
+        long[] elem = data.getOriginalValueHash();
+        buf.putLong(elem[0]);
+        buf.putLong(elem[1]);
         buf.put(serializedData);
         return buf.array();
     }
 
     @Override
     public void close() {
-
+        //Do nothing
     }
 }

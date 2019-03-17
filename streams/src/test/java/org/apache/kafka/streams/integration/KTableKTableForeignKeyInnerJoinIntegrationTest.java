@@ -30,6 +30,7 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Bytes;
+import org.apache.kafka.common.utils.Murmur3;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
@@ -139,20 +140,34 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         );
 
 
+//        SubscriptionWrapperSerializer sws = new SubscriptionWrapperSerializer();
+//        SubscriptionWrapperDeserializer swd = new SubscriptionWrapperDeserializer();
+//        byte[] md5 = Utils.md5(new byte[]{(byte)(0xFF), (byte)(0xFF), (byte)(0xFF), (byte)(0xFF)});
+//        SubscriptionWrapper wrapper = new SubscriptionWrapper(md5, false);
+//        byte[] serialized = sws.serialize(null, wrapper);
+//        SubscriptionWrapper deserialized = swd.deserialize(null, serialized);
+//
+//        assert(!deserialized.isPropagate());
+//        assert(java.util.Arrays.equals(deserialized.getHash(),md5));
+//
+//        byte[] md5Null = Utils.md5(new byte[]{});
+//        String foo = bytesToHex(md5Null).toString();
+//        System.out.println(foo);
+
+
         SubscriptionWrapperSerializer sws = new SubscriptionWrapperSerializer();
         SubscriptionWrapperDeserializer swd = new SubscriptionWrapperDeserializer();
-        byte[] md5 = Utils.md5(new byte[]{(byte)(0xFF), (byte)(0xFF), (byte)(0xFF), (byte)(0xFF)});
-        SubscriptionWrapper wrapper = new SubscriptionWrapper(md5, false);
+        long[] hashedValue = Murmur3.hash128(new byte[]{(byte)(0xFF), (byte)(0xFF), (byte)(0xFF), (byte)(0xFF)});
+        SubscriptionWrapper wrapper = new SubscriptionWrapper(hashedValue, false);
         byte[] serialized = sws.serialize(null, wrapper);
         SubscriptionWrapper deserialized = swd.deserialize(null, serialized);
 
         assert(!deserialized.isPropagate());
-        assert(java.util.Arrays.equals(deserialized.getHash(),md5));
+        assert(java.util.Arrays.equals(deserialized.getHash(),hashedValue));
 
-        byte[] md5Null = Utils.md5(new byte[]{});
-        String foo = bytesToHex(md5Null).toString();
+        long[] hashNull = Murmur3.hash128(new byte[]{});
+        String foo = hashNull.toString();
         System.out.println(foo);
-
 
 
         IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1, producerConfigOne, MOCK_TIME);
@@ -164,15 +179,13 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         CONSUMER_CONFIG.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
     }
 
-
-
-    public static String bytesToHex(byte[] in) {
-        final StringBuilder builder = new StringBuilder();
-        for(byte b : in) {
-            builder.append(String.format("%02x", b));
-        }
-        return builder.toString();
-    }
+//    public static String bytesToHex(byte[] in) {
+//        final StringBuilder builder = new StringBuilder();
+//        for(byte b : in) {
+//            builder.append(String.format("%02x", b));
+//        }
+//        return builder.toString();
+//    }
 
 
 

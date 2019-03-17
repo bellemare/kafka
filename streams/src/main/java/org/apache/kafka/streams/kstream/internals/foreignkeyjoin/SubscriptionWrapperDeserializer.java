@@ -15,23 +15,14 @@ public class SubscriptionWrapperDeserializer implements Deserializer<Subscriptio
     public SubscriptionWrapper deserialize(String topic, byte[] data) {
         //{16-bytes Hash}{1-byte boolean propagate}
         final ByteBuffer buf = ByteBuffer.wrap(data);
-        final byte[] hash = new byte[16];
-        buf.get(hash, 0, 16);
+        final long[] hash = new long[2];
+        hash[0] = buf.getLong();
+        hash[1] = buf.getLong();
         boolean propagate = true;
         if (buf.get(16) == 0x00) {
             propagate = false;
         }
         return new SubscriptionWrapper(hash, propagate);
-
-//        if (tempInst == 0x00)
-//            instruction = SubscriptionInstruction.DELETE_AND_PROPAGATE;
-//        else if (tempInst == 0x01)
-//            instruction = SubscriptionInstruction.DELETE_NO_PROPAGATE;
-//        else
-//            instruction = SubscriptionInstruction.PROPAGATE;
-//
-//        return new SubscriptionWrapper(hash, instruction);
-
     }
 
     @Override

@@ -18,6 +18,7 @@
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 import org.apache.kafka.common.serialization.Serializer;
+import org.apache.kafka.common.utils.Murmur3;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.kstream.internals.Change;
@@ -53,22 +54,11 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
 
         @Override
         public void process(final K key, final Change<V> change) {
-            byte[] hash = null;
-            byte[] nullHash = null;
+            long[] nullHash = Murmur3.hash128(new byte[]{});
 
-            try {
-                //TODO- Bellemare - fix this jank.
-                nullHash = Utils.md5(new byte[]{});
-                if (change.newValue == null)
-                    //TODO - Bellemare - do I want to do this? Or do I need a flag in case I get a collision with the empty array?
-                    hash = Utils.md5(new byte[]{}); //Use an empty array to represent nulls. MD5 hash fails otherwise.
-                else
-                    hash = Utils.md5(valueSerializer.serialize(null, change.newValue));
-            } catch (NoSuchAlgorithmException e) {
-                System.out.println("FATAL ERROR USING MD5 HASH");
-                System.exit(-1);
-                //TODO - Bellemare - figure out what to do with this.
-            }
+            long[] currentHash = (change.newValue == null ?
+                    Murmur3.hash128(new byte[]{}):
+                    Murmur3.hash128(valueSerializer.serialize(null, change.newValue)));
 
             if (change.oldValue != null) {
                 final KO oldForeignKey = mapper.apply(change.oldValue);
@@ -80,13 +70,13 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
                     //Requires equal to be defined...
                     if (oldForeignKey.equals(extractedNewForeignKey)) {
                         //Same foreign key. Just propagate onwards.
-                        context().forward(combinedNewKey, new SubscriptionWrapper(hash, true));
+                        context().forward(combinedNewKey, new SubscriptionWrapper(currentHash, true));
                     } else {
                         //Different Foreign Key - delete the old key value and propagate the new one.
                         //Note that we indicate that we don't want to propagate the delete to the join output.
                         //The downstream processor to delete it from the local state store, but not propagate it.
                         context().forward(combinedOldKey, new SubscriptionWrapper(nullHash, false));
-                        context().forward(combinedNewKey, new SubscriptionWrapper(hash, true));
+                        context().forward(combinedNewKey, new SubscriptionWrapper(currentHash, true));
                     }
                 } else {
                     //A propagatable delete. Set hash to null instead of using the null hash code.
@@ -95,7 +85,7 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
             } else if (change.newValue != null) {
                 final KO extractedForeignKeyValue = mapper.apply(change.newValue);
                 final CombinedKey<KO, K> newCombinedKeyValue = new CombinedKey<>(extractedForeignKeyValue, key);
-                context().forward(newCombinedKeyValue, new SubscriptionWrapper(hash, true));
+                context().forward(newCombinedKeyValue, new SubscriptionWrapper(currentHash, true));
             }
         }
 

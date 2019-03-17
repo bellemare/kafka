@@ -18,6 +18,7 @@
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 import org.apache.kafka.common.serialization.Serializer;
+import org.apache.kafka.common.utils.Murmur3;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
@@ -57,19 +58,23 @@ public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements Proces
             public void process(K key, SubscriptionResponseWrapper<VO> value) {
                 final V currentValue = originalSource.get(key);
 
-                byte[] currentHash = null;
-                try {
-                    if (currentValue == null)
-                        currentHash = Utils.md5(new byte[]{});
-                    else
-                        currentHash = Utils.md5(valueSerializer.serialize(null, currentValue));
-                } catch (NoSuchAlgorithmException e) {
-                    //TODO - Bellemare - figure out what to do with this
-                    System.out.println("FATAL ERROR - NO MD5 HASH TO BE FOUND");
-                    System.exit(-1);
-                }
+                long[] currentHash = (currentValue == null ?
+                        Murmur3.hash128(new byte[]{}):
+                        Murmur3.hash128(valueSerializer.serialize(null, currentValue)));
 
-                final byte[] messageHash = value.getOriginalValueHash();
+//                byte[] currentHash = null;
+//                try {
+//                    if (currentValue == null)
+//                        currentHash = Utils.md5(new byte[]{});
+//                    else
+//                        currentHash = Utils.md5(valueSerializer.serialize(null, currentValue));
+//                } catch (NoSuchAlgorithmException e) {
+//                    //TODO - Bellemare - figure out what to do with this
+//                    System.out.println("FATAL ERROR - NO MD5 HASH TO BE FOUND");
+//                    System.exit(-1);
+//                }
+
+                final long[] messageHash = value.getOriginalValueHash();
 
                 //If this value doesn't match the current value from the original table, it is stale and should be discarded.
                 if (java.util.Arrays.equals(messageHash, currentHash)) {
