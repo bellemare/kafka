@@ -28,6 +28,7 @@ import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 
 import java.security.NoSuchAlgorithmException;
+import java.util.Random;
 
 public class KTableRepartitionerProcessorSupplier<K, KO, V> implements ProcessorSupplier<K, Change<V>> {
 
@@ -54,11 +55,12 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
 
         @Override
         public void process(final K key, final Change<V> change) {
+            Long random = new Random().nextLong();
             long[] nullHash = Murmur3.hash128(new byte[]{});
 
             long[] currentHash = (change.newValue == null ?
                     Murmur3.hash128(new byte[]{}):
-                    Murmur3.hash128(valueSerializer.serialize(null, change.newValue)));
+                    Murmur3.hash128(valueSerializer.serialize(random + "", change.newValue)));
 
             if (change.oldValue != null) {
                 final KO oldForeignKey = mapper.apply(change.oldValue);

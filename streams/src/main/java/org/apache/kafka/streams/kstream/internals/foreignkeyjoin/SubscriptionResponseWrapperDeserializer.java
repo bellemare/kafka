@@ -24,8 +24,9 @@ public class SubscriptionResponseWrapperDeserializer<V> implements Deserializer<
         final long[] hash = new long[2];
         hash[0] = buf.getLong();
         hash[1] = buf.getLong();
-        final byte[] serializedValue = new byte[data.length - 16];
-        buf.get(serializedValue, 0, data.length-16);
+        final byte[] serializedValue = (data.length == 16 ? null : new byte[data.length - 16]);
+        if (serializedValue != null)
+            buf.get(serializedValue, 0, data.length-16);
         V value = deserializer.deserialize(null, serializedValue);
         return new SubscriptionResponseWrapper<>(hash, value);
     }

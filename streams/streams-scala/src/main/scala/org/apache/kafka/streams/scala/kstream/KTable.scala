@@ -309,19 +309,13 @@ class KTable[K, V](val inner: KTableJ[K, V]) {
   def joinOnForeignKeyAlpha[VR, KO, VO](other: KTable[KO, VO],
                                    keyExtractor: ValueMapper[V, KO],
                                    joiner: ValueJoiner[V, VO, VR],
-                                   materialized: Materialized[K, VR, KeyValueStore[Bytes, Array[Byte]]],
-                                   thisSerialized: Serialized[K, V],
-                                   otherSerialized: Serialized[KO, VO],
-                                   joinedSerialized: Serialized[K, VR]): KTable[K, VR] = {
+                                   materialized: Materialized[K, VR, KeyValueStore[Bytes, Array[Byte]]]): KTable[K, VR] = {
 
-    inner.joinOnForeignKey(
+    inner.join(
       other.inner,
       keyExtractor,
       joiner,
-      materialized,
-      thisSerialized,
-      otherSerialized,
-      joinedSerialized)
+      materialized)
   }
 
   /**

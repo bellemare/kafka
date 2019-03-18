@@ -44,6 +44,9 @@ import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapper;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperDeserializer;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperSerializer;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperDeserializer;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerializer;
@@ -89,12 +92,27 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
     private KafkaStreams streamsThree;
     private final static Properties CONSUMER_CONFIG = new Properties();
 
+    static final Properties producerConfigOne = new Properties();
+    static final Properties producerConfigTwo = new Properties();
+
     @BeforeClass
     public static void beforeTest() throws Exception {
         //Use multiple partitions to ensure distribution of keys.
         CLUSTER.createTopic(TABLE_1, 3, 1);
         CLUSTER.createTopic(TABLE_2, 3, 1);
         CLUSTER.createTopic(OUTPUT, 3, 1);
+
+        producerConfigOne.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
+        producerConfigOne.put(ProducerConfig.ACKS_CONFIG, "all");
+        producerConfigOne.put(ProducerConfig.RETRIES_CONFIG, 0);
+        producerConfigOne.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, IntegerSerializer.class);
+        producerConfigOne.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, FloatSerializer.class);
+
+        producerConfigTwo.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
+        producerConfigTwo.put(ProducerConfig.ACKS_CONFIG, "all");
+        producerConfigTwo.put(ProducerConfig.RETRIES_CONFIG, 0);
+        producerConfigTwo.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        producerConfigTwo.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, LongSerializer.class);
 
         streamsConfig = new Properties();
         streamsConfig.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
@@ -104,26 +122,16 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         streamsConfig.put(IntegrationTestUtils.INTERNAL_LEAVE_GROUP_ON_CLOSE, true);
         streamsConfig.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 100);
 
-        final Properties producerConfigOne = new Properties();
-        producerConfigOne.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
-        producerConfigOne.put(ProducerConfig.ACKS_CONFIG, "all");
-        producerConfigOne.put(ProducerConfig.RETRIES_CONFIG, 0);
-        producerConfigOne.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, IntegerSerializer.class);
-        producerConfigOne.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, FloatSerializer.class);
+
 
         final List<KeyValue<Integer, Float>> table1 = Arrays.asList(
             new KeyValue<>(1, 1.33f),
             new KeyValue<>(2, 2.22f),
             new KeyValue<>(3, -1.22f), //Won't be joined in yet.
             new KeyValue<>(4, -2.22f)  //Won't be joined in at all.
+                //,
+            //new KeyValue<>(5, 5.55f)   //Will have foreign key be deleted
         );
-
-        final Properties producerConfigTwo = new Properties();
-        producerConfigTwo.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
-        producerConfigTwo.put(ProducerConfig.ACKS_CONFIG, "all");
-        producerConfigTwo.put(ProducerConfig.RETRIES_CONFIG, 0);
-        producerConfigTwo.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        producerConfigTwo.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, LongSerializer.class);
 
         //Partitions pre-computed using the default Murmur2 hash, just to ensure that all 3 partitions will be exercised.
         final List<KeyValue<String, Long>> table2 = Arrays.asList(
@@ -154,7 +162,6 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
 //        String foo = bytesToHex(md5Null).toString();
 //        System.out.println(foo);
 
-
         SubscriptionWrapperSerializer sws = new SubscriptionWrapperSerializer();
         SubscriptionWrapperDeserializer swd = new SubscriptionWrapperDeserializer();
         long[] hashedValue = Murmur3.hash128(new byte[]{(byte)(0xFF), (byte)(0xFF), (byte)(0xFF), (byte)(0xFF)});
@@ -165,9 +172,25 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         assert(!deserialized.isPropagate());
         assert(java.util.Arrays.equals(deserialized.getHash(),hashedValue));
 
-        long[] hashNull = Murmur3.hash128(new byte[]{});
-        String foo = hashNull.toString();
-        System.out.println(foo);
+        SubscriptionResponseWrapper<String> srw = new SubscriptionResponseWrapper<>(hashedValue, null);
+        SubscriptionResponseWrapperSerializer<String> ser = new SubscriptionResponseWrapperSerializer<>(Serdes.String().serializer());
+        SubscriptionResponseWrapperDeserializer<String> deser = new SubscriptionResponseWrapperDeserializer<>(Serdes.String().deserializer());
+
+        byte[] serResponse = ser.serialize(null, srw);
+        SubscriptionResponseWrapper<String> result = deser.deserialize(null, serResponse);
+
+
+        byte[] stringResults = Serdes.String().serializer().serialize(null, null);
+        String dataadas = Serdes.String().deserializer().deserialize(null, stringResults);
+
+
+        assert(java.util.Arrays.equals(result.getOriginalValueHash(), hashedValue));
+        assert(result.getForeignValue() == null);
+
+
+//        long[] hashNull = Murmur3.hash128(new byte[]{});
+//        String foo = hashNull.toString();
+//        System.out.println(foo);
 
 
         IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1, producerConfigOne, MOCK_TIME);
@@ -215,11 +238,18 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         INNER
     }
 
+//    @Test
+//    public void shouldInnerInnerJoinDelete() throws Exception {
+//        Set<KeyValue<Integer, String>> expected = new HashSet<>();
+//        expected.add(new KeyValue<>(1, null));
+//    }
+
     @Test
     public void shouldInnerInnerJoinQueryable() throws Exception {
         Set<KeyValue<Integer, String>> expectedOne = new HashSet<>();
         expectedOne.add(new KeyValue<>(1, "value1=1.33,value2=10"));
         expectedOne.add(new KeyValue<>(2, "value1=2.22,value2=20"));
+        //expectedOne.add(new KeyValue<>(5, "value1=5.55,value2=50"));
 
         List<KeyValue<Integer, String>> expectedTwo = new LinkedList<>();
         expectedTwo.add(new KeyValue<>(3, "value1=1.11,value2=10"));
@@ -261,14 +291,12 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
                 new KeyValue<>(3, 1.11f)  //Partition 0 - This will be the final result.
         );
 
-        final Properties producerConfig = new Properties();
-        producerConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
-        producerConfig.put(ProducerConfig.ACKS_CONFIG, "all");
-        producerConfig.put(ProducerConfig.RETRIES_CONFIG, 0);
-        producerConfig.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, IntegerSerializer.class);
-        producerConfig.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, FloatSerializer.class);
+        final List<KeyValue<String, Long>> table2KeyChange = Arrays.asList(
+                new KeyValue<>("5", null)
+        );
 
-        IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1ForeignKeyChange, producerConfig, MOCK_TIME);
+        IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1ForeignKeyChange, producerConfigOne, MOCK_TIME);
+        IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_2, table2KeyChange, producerConfigTwo, MOCK_TIME);
 
         //Worst case scenario is that every event update gets propagated to the output.
         //Realistically we just need to wait until every update is sent, and so a conservative 15s timeout has been

@@ -4,7 +4,7 @@ public class SubscriptionResponseWrapper<FV> {
     private long[] originalValueHash;
     private FV foreignValue;
 
-    SubscriptionResponseWrapper(long[] originalValueHash, FV foreignValue) {
+    public SubscriptionResponseWrapper(long[] originalValueHash, FV foreignValue) {
         this.originalValueHash = originalValueHash;
         this.foreignValue = foreignValue;
     }

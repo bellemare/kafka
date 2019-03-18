@@ -79,7 +79,7 @@ public class KTableKTablePrefixScanProcessorSupplier<K, KO, VO> implements Proce
 
             while (prefixScanResults.hasNext()) {
                 final KeyValue<CombinedKey<KO, K>, SubscriptionWrapper> scanResult = prefixScanResults.next();
-                context().forward(scanResult.key.getPrimaryKey(), new SubscriptionResponseWrapper<VO>(scanResult.value.getHash(), value.newValue));
+                context().forward(scanResult.key.getPrimaryKey(), new SubscriptionResponseWrapper<>(scanResult.value.getHash(), value.newValue));
             }
         }
     }

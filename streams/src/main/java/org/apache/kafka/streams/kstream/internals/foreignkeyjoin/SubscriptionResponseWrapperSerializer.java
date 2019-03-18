@@ -21,11 +21,13 @@ public class SubscriptionResponseWrapperSerializer<V> implements Serializer<Subs
     public byte[] serialize(String topic, SubscriptionResponseWrapper<V> data) {
         //{16-bytes Hash}{n-bytes serialized data}
         byte[] serializedData = serializer.serialize(null, data.getForeignValue());
-        final ByteBuffer buf = ByteBuffer.allocate(16 + serializedData.length);
+        int length = (serializedData == null ? 0 : serializedData.length);
+        final ByteBuffer buf = ByteBuffer.allocate(16 + length);
         long[] elem = data.getOriginalValueHash();
         buf.putLong(elem[0]);
         buf.putLong(elem[1]);
-        buf.put(serializedData);
+        if (serializedData != null)
+            buf.put(serializedData);
         return buf.array();
     }
 

@@ -29,6 +29,7 @@ import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.state.KeyValueStore;
 
 import java.security.NoSuchAlgorithmException;
+import java.util.Random;
 
 public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements ProcessorSupplier<K, SubscriptionResponseWrapper<VO>> {
     private final String stateStoreName;
@@ -57,10 +58,11 @@ public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements Proces
             @Override
             public void process(K key, SubscriptionResponseWrapper<VO> value) {
                 final V currentValue = originalSource.get(key);
+                Long random = new Random().nextLong();
 
                 long[] currentHash = (currentValue == null ?
                         Murmur3.hash128(new byte[]{}):
-                        Murmur3.hash128(valueSerializer.serialize(null, currentValue)));
+                        Murmur3.hash128(valueSerializer.serialize(random + "", currentValue)));
 
 //                byte[] currentHash = null;
 //                try {
@@ -79,7 +81,11 @@ public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements Proces
                 //If this value doesn't match the current value from the original table, it is stale and should be discarded.
                 if (java.util.Arrays.equals(messageHash, currentHash)) {
                     final VO otherValue = value.getForeignValue();
-                    final VR result = joiner.apply(currentValue, otherValue);
+                    //Inner Join
+                    VR result = null;
+                    if (otherValue != null && currentValue != null) {
+                        result = joiner.apply(currentValue, otherValue);
+                    }
                     context().forward(key, result);
                 }
             }
