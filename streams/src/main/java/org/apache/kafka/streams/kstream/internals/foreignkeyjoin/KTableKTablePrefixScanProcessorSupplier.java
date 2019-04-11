@@ -72,6 +72,8 @@ public class KTableKTablePrefixScanProcessorSupplier<K, KO, VO> implements Proce
             if (value.oldValue == value.newValue)
                 return;
 
+
+
             //Wrap it in a combinedKey and let the serializer handle the prefixing.
             final CombinedKey<KO, K> prefixKey = new CombinedKey<>(key);
 

@@ -749,10 +749,15 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
 
         final HashSet<String> copartitions = new HashSet<>();
         copartitions.add(repartitionSourceName);
-        copartitions.add(finalRepartitionSourceName);
         copartitions.addAll(((KTableImpl<?, ?, ?>) other).sourceNodes);
-        copartitions.addAll(sourceNodes);
+//        copartitions.add(finalRepartitionSourceName);
+//        copartitions.addAll(sourceNodes);
         builder.internalTopologyBuilder.copartitionSources(copartitions);
+
+        final HashSet<String> copartitions2 = new HashSet<>();
+        copartitions2.add(finalRepartitionSourceName);
+        copartitions2.addAll(sourceNodes);
+        builder.internalTopologyBuilder.copartitionSources(copartitions2);
 
         final ProcessorParameters repartitionProcessorParameters = new ProcessorParameters<>(
                 repartitionProcessor,

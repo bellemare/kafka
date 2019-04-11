@@ -18,10 +18,7 @@ package org.apache.kafka.streams.integration;
 
 import kafka.utils.MockTime;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.internals.PartitionAssignor;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.header.internals.RecordHeader;
-import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.apache.kafka.common.serialization.FloatSerializer;
 import org.apache.kafka.common.serialization.IntegerDeserializer;
 import org.apache.kafka.common.serialization.IntegerSerializer;
@@ -31,7 +28,6 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.common.utils.Murmur3;
-import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -77,7 +73,7 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.junit.Assert.*;
 
 @Category({IntegrationTest.class})
-public class KTableKTableForeignKeyInnerJoinIntegrationTest {
+public class KTableKTableForeignKeyInnerJoinMultiIntegrationTest {
     private final static int NUM_BROKERS = 1;
 
     @ClassRule
@@ -85,6 +81,7 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
     private final static MockTime MOCK_TIME = CLUSTER.time;
     private final static String TABLE_1 = "table1";
     private final static String TABLE_2 = "table2";
+    private final static String TABLE_3 = "table3";
     private final static String OUTPUT = "output-";
     private static Properties streamsConfig;
     private KafkaStreams streams;
@@ -94,12 +91,15 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
 
     static final Properties producerConfigOne = new Properties();
     static final Properties producerConfigTwo = new Properties();
+    static final Properties producerConfigThree = new Properties();
+
 
     @BeforeClass
     public static void beforeTest() throws Exception {
         //Use multiple partitions to ensure distribution of keys.
         CLUSTER.createTopic(TABLE_1, 11, 1);
         CLUSTER.createTopic(TABLE_2, 2, 1);
+        CLUSTER.createTopic(TABLE_3, 7, 1);
         CLUSTER.createTopic(OUTPUT, 13, 1);
 
         producerConfigOne.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
@@ -113,6 +113,12 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         producerConfigTwo.put(ProducerConfig.RETRIES_CONFIG, 0);
         producerConfigTwo.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         producerConfigTwo.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, LongSerializer.class);
+
+        producerConfigThree.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
+        producerConfigThree.put(ProducerConfig.ACKS_CONFIG, "all");
+        producerConfigThree.put(ProducerConfig.RETRIES_CONFIG, 0);
+        producerConfigThree.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, IntegerSerializer.class);
+        producerConfigThree.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 
         streamsConfig = new Properties();
         streamsConfig.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
@@ -147,54 +153,15 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
             new KeyValue<>("9", 90L)  //partition 2
         );
 
-
-//        SubscriptionWrapperSerializer sws = new SubscriptionWrapperSerializer();
-//        SubscriptionWrapperDeserializer swd = new SubscriptionWrapperDeserializer();
-//        byte[] md5 = Utils.md5(new byte[]{(byte)(0xFF), (byte)(0xFF), (byte)(0xFF), (byte)(0xFF)});
-//        SubscriptionWrapper wrapper = new SubscriptionWrapper(md5, false);
-//        byte[] serialized = sws.serialize(null, wrapper);
-//        SubscriptionWrapper deserialized = swd.deserialize(null, serialized);
-//
-//        assert(!deserialized.isPropagate());
-//        assert(java.util.Arrays.equals(deserialized.getHash(),md5));
-//
-//        byte[] md5Null = Utils.md5(new byte[]{});
-//        String foo = bytesToHex(md5Null).toString();
-//        System.out.println(foo);
-
-        SubscriptionWrapperSerializer sws = new SubscriptionWrapperSerializer();
-        SubscriptionWrapperDeserializer swd = new SubscriptionWrapperDeserializer();
-        long[] hashedValue = Murmur3.hash128(new byte[]{(byte)(0xFF), (byte)(0xFF), (byte)(0xFF), (byte)(0xFF)});
-        SubscriptionWrapper wrapper = new SubscriptionWrapper(hashedValue, false);
-        byte[] serialized = sws.serialize(null, wrapper);
-        SubscriptionWrapper deserialized = swd.deserialize(null, serialized);
-
-        assert(!deserialized.isPropagate());
-        assert(java.util.Arrays.equals(deserialized.getHash(),hashedValue));
-
-        SubscriptionResponseWrapper<String> srw = new SubscriptionResponseWrapper<>(hashedValue, null);
-        SubscriptionResponseWrapperSerializer<String> ser = new SubscriptionResponseWrapperSerializer<>(Serdes.String().serializer());
-        SubscriptionResponseWrapperDeserializer<String> deser = new SubscriptionResponseWrapperDeserializer<>(Serdes.String().deserializer());
-
-        byte[] serResponse = ser.serialize(null, srw);
-        SubscriptionResponseWrapper<String> result = deser.deserialize(null, serResponse);
-
-
-        byte[] stringResults = Serdes.String().serializer().serialize(null, null);
-        String dataadas = Serdes.String().deserializer().deserialize(null, stringResults);
-
-
-        assert(java.util.Arrays.equals(result.getOriginalValueHash(), hashedValue));
-        assert(result.getForeignValue() == null);
-
-
-//        long[] hashNull = Murmur3.hash128(new byte[]{});
-//        String foo = hashNull.toString();
-//        System.out.println(foo);
+        //Partitions pre-computed using the default Murmur2 hash, just to ensure that all 3 partitions will be exercised.
+        final List<KeyValue<Integer, String>> table3 = Arrays.asList(
+                new KeyValue<>(10, "waffle")
+        );
 
 
         IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1, producerConfigOne, MOCK_TIME);
         IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_2, table2, producerConfigTwo, MOCK_TIME);
+        IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_3, table3, producerConfigThree, MOCK_TIME);
 
         CONSUMER_CONFIG.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
         CONSUMER_CONFIG.put(ConsumerConfig.GROUP_ID_CONFIG, "ktable-ktable-consumer");
@@ -247,18 +214,13 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
     @Test
     public void shouldInnerInnerJoinQueryable() throws Exception {
         Set<KeyValue<Integer, String>> expectedOne = new HashSet<>();
-        expectedOne.add(new KeyValue<>(1, "value1=1.33,value2=10"));
-        expectedOne.add(new KeyValue<>(2, "value1=2.22,value2=20"));
-        //expectedOne.add(new KeyValue<>(5, "value1=5.55,value2=50"));
+        expectedOne.add(new KeyValue<>(1, "value1=1.33,value2=10,value3=waffle"));
 
-        List<KeyValue<Integer, String>> expectedTwo = new LinkedList<>();
-        expectedTwo.add(new KeyValue<>(3, "value1=1.11,value2=10"));
-        verifyKTableKTableJoin(JoinType.INNER, expectedOne, expectedTwo, true);
+        verifyKTableKTableJoin(JoinType.INNER, expectedOne, true);
     }
 
     private void verifyKTableKTableJoin(final JoinType joinType,
                                         final Set<KeyValue<Integer, String>> expectedResult,
-                                        final List<KeyValue<Integer, String>> expectedResultTwo,
                                         boolean verifyQueryableState) throws Exception {
         final String queryableName = verifyQueryableState ? joinType + "-ktable-ktable-joinOnForeignKey-query" : null;
         streamsConfig.put(StreamsConfig.APPLICATION_ID_CONFIG, joinType + "-ktable-ktable-joinOnForeignKey" + queryableName);
@@ -276,101 +238,6 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
                 expectedResult.size()));
 
         assertThat(result, equalTo(expectedResult));
-
-        //Rapidly reassign the foreignKey to exercise out-of-order resolution.
-        final List<KeyValue<Integer, Float>> table1ForeignKeyChange = Arrays.asList(
-                new KeyValue<>(3, 2.22f), //Partition 2
-                new KeyValue<>(3, 3.33f), //Partition 2
-                new KeyValue<>(3, 4.44f), //Partition 1
-                new KeyValue<>(3, 5.55f), //Partition 0
-                new KeyValue<>(3, 9.99f), //Partition 2
-                new KeyValue<>(3, 8.88f), //Partition 0
-                new KeyValue<>(3, 0.23f), //Partition 2
-                new KeyValue<>(3, 7.77f), //Partition 0
-                new KeyValue<>(3, 6.66f), //Partition 1
-                new KeyValue<>(3, 1.11f)  //Partition 0 - This will be the final result.
-        );
-
-        final List<KeyValue<String, Long>> table2KeyChange = Arrays.asList(
-                new KeyValue<>("5", null)
-        );
-
-        IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1ForeignKeyChange, producerConfigOne, MOCK_TIME);
-        IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_2, table2KeyChange, producerConfigTwo, MOCK_TIME);
-
-        //Worst case scenario is that every event update gets propagated to the output.
-        //Realistically we just need to wait until every update is sent, and so a conservative 15s timeout has been
-        //selected in the case of slower systems.
-        final List<KeyValue<Integer, String>> resultTwo = IntegrationTestUtils.readKeyValues(OUTPUT, CONSUMER_CONFIG, 15*1000L, Integer.MAX_VALUE);
-
-        assertThat(resultTwo.get(resultTwo.size()-1), equalTo(expectedResultTwo.get(0)));
-
-        if (verifyQueryableState) {
-            Set<KeyValue<Integer, String>> totalResults = new HashSet<>(expectedResult);
-            totalResults.add(expectedResultTwo.get(expectedResultTwo.size()-1));
-            verifyKTableKTableJoinQueryableState(joinType, totalResults);
-        }
-    }
-
-    private void verifyKTableKTableJoinQueryableState(final JoinType joinType,
-                                                      final Set<KeyValue<Integer, String>> expectedResult) {
-        final String queryableName = joinType + "-ktable-ktable-joinOnForeignKey-query";
-        final ReadOnlyKeyValueStore<Integer, String> myJoinStoreOne = streams.store(queryableName,
-                QueryableStoreTypes.keyValueStore());
-
-        final ReadOnlyKeyValueStore<Integer, String> myJoinStoreTwo = streamsTwo.store(queryableName,
-                QueryableStoreTypes.keyValueStore());
-
-        final ReadOnlyKeyValueStore<Integer, String> myJoinStoreThree = streamsThree.store(queryableName,
-                QueryableStoreTypes.keyValueStore());
-
-        // store only keeps last set of values, not entire stream of value changes
-        final Map<Integer, String> expectedInStore = new HashMap<>();
-        for (KeyValue<Integer, String> expected : expectedResult) {
-            expectedInStore.put(expected.key, expected.value);
-        }
-
-        // depending on partition assignment, the values will be in one of the three stream clients.
-        for (Map.Entry<Integer, String> expected : expectedInStore.entrySet()) {
-            String one = myJoinStoreOne.get(expected.getKey());
-            String two = myJoinStoreTwo.get(expected.getKey());
-            String three = myJoinStoreThree.get(expected.getKey());
-
-            String result;
-            if (one != null)
-                result = one;
-            else if (two != null)
-                result = two;
-            else if (three != null)
-                result = three;
-            else
-                throw new RuntimeException("Cannot find key " + expected.getKey() + " in any of the state stores");
-            assertEquals(expected.getValue(), result);
-        }
-
-        //Merge all the iterators together to ensure that their sum contains the total set of expected elements.
-        final KeyValueIterator<Integer, String> allOne = myJoinStoreOne.all();
-        final KeyValueIterator<Integer, String> allTwo = myJoinStoreTwo.all();
-        final KeyValueIterator<Integer, String> allThree = myJoinStoreThree.all();
-
-        List<KeyValue<Integer, String>> all = new LinkedList<>();
-
-        while (allOne.hasNext()) {
-            all.add(allOne.next());
-        }
-        while (allTwo.hasNext()) {
-            all.add(allTwo.next());
-        }
-        while (allThree.hasNext()) {
-            all.add(allThree.next());
-        }
-        allOne.close();
-        allTwo.close();
-        allThree.close();
-
-        for (KeyValue<Integer, String> elem : all) {
-            assertTrue(expectedResult.contains(elem));
-        }
     }
 
     private KafkaStreams prepareTopology(final String queryableName) {
@@ -378,8 +245,9 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
 
         final KTable<Integer, Float> table1 = builder.table(TABLE_1, Consumed.with(Serdes.Integer(), Serdes.Float()));
         final KTable<String, Long> table2 = builder.table(TABLE_2, Consumed.with(Serdes.String(), Serdes.Long()));
+        final KTable<Integer, String> table3 = builder.table(TABLE_3, Consumed.with(Serdes.Integer(), Serdes.String()));
 
-        Materialized<Integer, String, KeyValueStore<Bytes, byte[]>> materialized = null;
+        Materialized<Integer, String, KeyValueStore<Bytes, byte[]>> materialized;
         if (queryableName != null) {
             materialized = Materialized.<Integer, String, KeyValueStore<Bytes, byte[]>>as(queryableName)
                     .withKeySerde(Serdes.Integer())
@@ -389,10 +257,31 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
             throw new RuntimeException("Current implementation of joinOnForeignKey requires a materialized store");
         }
 
+        Materialized<Integer, String, KeyValueStore<Bytes, byte[]>> materializedTwo;
+        if (queryableName != null) {
+            materializedTwo = Materialized.<Integer, String, KeyValueStore<Bytes, byte[]>>as(queryableName + "wafflehouse")
+                    .withKeySerde(Serdes.Integer())
+                    .withValueSerde(Serdes.String())
+                    .withCachingDisabled();
+        } else {
+            throw new RuntimeException("Current implementation of joinOnForeignKey requires a materialized store");
+        }
+
+
         ValueMapper<Float, String> tableOneKeyExtractor = (value) -> Integer.toString((int)value.floatValue());
+        ValueMapper<String, Integer> joinedTableKeyExtractor = (value) -> {
+            if (value.contains("value2=10"))
+                return 10;
+            else
+                return 0;
+        }; //Hardwired to get the waffle FK.
+
         ValueJoiner<Float, Long, String> joiner = (value1, value2) -> "value1=" + value1 + ",value2=" + value2;
+        ValueJoiner<String, String, String> joinerTwo = (value1, value2) -> value1 + ",value3=" + value2;
+
 
         table1.join(table2, tableOneKeyExtractor, joiner, materialized)
+              .join(table3, joinedTableKeyExtractor, joinerTwo, materializedTwo)
             .toStream()
             .to(OUTPUT, Produced.with(Serdes.Integer(), Serdes.String()));
 

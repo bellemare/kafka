@@ -61,6 +61,7 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
             long[] currentHash = (change.newValue == null ?
                     Murmur3.hash128(new byte[]{}):
                     Murmur3.hash128(valueSerializer.serialize(random + "", change.newValue)));
+                    //Murmur3.hash128(valueSerializer.serialize(null, change.newValue)));
 
             if (change.oldValue != null) {
                 final KO oldForeignKey = mapper.apply(change.oldValue);

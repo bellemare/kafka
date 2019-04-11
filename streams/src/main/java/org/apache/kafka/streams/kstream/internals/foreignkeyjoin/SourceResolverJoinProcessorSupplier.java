@@ -63,6 +63,7 @@ public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements Proces
                 long[] currentHash = (currentValue == null ?
                         Murmur3.hash128(new byte[]{}):
                         Murmur3.hash128(valueSerializer.serialize(random + "", currentValue)));
+                        //Murmur3.hash128(valueSerializer.serialize(null, currentValue)));
 
 //                byte[] currentHash = null;
 //                try {
