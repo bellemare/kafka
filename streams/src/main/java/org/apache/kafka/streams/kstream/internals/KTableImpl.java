@@ -719,9 +719,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final StateStore prefixScannableDBRef = thisRocksDBRef.get();
         final Materialized<CombinedKey<KO, K>, SubscriptionWrapper, KeyValueStore<Bytes, byte[]>> foreignMaterialized =
                 Materialized.<CombinedKey<KO, K>, SubscriptionWrapper, KeyValueStore<Bytes, byte[]>>as(prefixScannableDBRef.name())
-                //Need all values to be immediately available in the rocksDB store.
-                //No easy way to flush cache prior to prefixScan, so caching is disabled on this store.
-                .withCachingDisabled()
                 .withKeySerde(combinedKeySerde)
                 .withValueSerde(new SubscriptionWrapperSerde());
         final MaterializedInternal<CombinedKey<KO, K>, SubscriptionWrapper, KeyValueStore<Bytes, byte[]>> repartitionedPrefixScannableStore =
@@ -734,13 +731,12 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
 
         //Need to write all updates to a given K back to the same partition, as at this point in the topology
         //everything is partitioned on KO from the previous repartition step.
-
         final String finalRepartitionerName = builder.newProcessorName(REPARTITION_NAME);
         final String finalRepartitionTopicName = JOINOTHER_NAME + finalRepartitionerName;
         final String finalRepartitionSourceName = builder.newProcessorName(SOURCE_NAME + finalRepartitionerName);
         final String finalRepartitionSinkName = builder.newProcessorName(SINK_NAME + finalRepartitionerName);
 
-        //Create the processor to resolve the propagation wrappers against the highwater mark for a given K.
+        //Create the processor to resolve the subscription updates.
         final SourceResolverJoinProcessorSupplier<K, V, VO, VR> resolverProcessor = new SourceResolverJoinProcessorSupplier<>(this.queryableStoreName, this.valueSerde().serializer(), joiner);
         final String resolverProcessorName = builder.newProcessorName(KTableImpl.SOURCE_NAME);
 
@@ -750,6 +746,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final HashSet<String> copartitions = new HashSet<>();
         copartitions.add(repartitionSourceName);
         copartitions.addAll(((KTableImpl<?, ?, ?>) other).sourceNodes);
+        //TODO - Figure out a correct copartitioning strategy for topics with differing partition counts.
 //        copartitions.add(finalRepartitionSourceName);
 //        copartitions.addAll(sourceNodes);
         builder.internalTopologyBuilder.copartitionSources(copartitions);

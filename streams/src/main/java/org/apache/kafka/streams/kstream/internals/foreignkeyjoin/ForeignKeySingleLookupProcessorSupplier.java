@@ -60,7 +60,7 @@ public class ForeignKeySingleLookupProcessorSupplier<K, KO, V, VO>
             public void process(final CombinedKey<KO, K> key, final SubscriptionWrapper value) {
                 VO foreignValue = foreignValues.get(key.getForeignKey());
 
-                //TODO - Bellemare - If the subscriptionWrapper indicates a null, must delete.
+                //If the subscriptionWrapper hash indicates a null, must delete.
                 if (value.getHash() == null) {
                     store.delete(key);
                 } else {

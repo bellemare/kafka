@@ -418,6 +418,7 @@ public final class Utils {
         return h;
     }
 
+    //TODO - Bellemare - This can be removed if we stick with Murmur3, which I think we should.
     /**
      * Generates an md5 hash from the byte array
      * @param data byte array to hash
