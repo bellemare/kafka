@@ -993,7 +993,10 @@ public class StreamThread extends Thread {
                 throw new TaskMigratedException(task);
             }
 
-            log.info("Bellemare - partition {}. Current tasks: {}",
+            //TODO - Remove this info logger.
+            // Illustrates the missing tasks when joining mismatched partition counts with foreignKey join.
+            // This is shown by the NullPointer task exception thrown in KTableKTableForeignKeyInnerJoinMultiIntegrationTest.
+            log.info("` - partition {}. Current tasks: {}",
                     partition,
                     taskManager.toString(">")
                     );

@@ -89,13 +89,20 @@ public class KTableKTableForeignKeyInnerJoinMultiIntegrationTest {
     private KafkaStreams streamsThree;
     private final static Properties CONSUMER_CONFIG = new Properties();
 
-    static final Properties producerConfigOne = new Properties();
-    static final Properties producerConfigTwo = new Properties();
-    static final Properties producerConfigThree = new Properties();
-
+    private final static Properties producerConfigOne = new Properties();
+    private final static Properties producerConfigTwo = new Properties();
+    private final static Properties producerConfigThree = new Properties();
 
     @BeforeClass
     public static void beforeTest() throws Exception {
+        //TODO - This fails about half the time! Not all of the tasks seem to get created or assigned, and it crashes.
+        /**
+         * Exception in thread "INNER-ktable-ktable-joinOnForeignKeyINNER-ktable-ktable-joinOnForeignKey-query-665f82ce-37a7-4176-b572-5244ed20e13f-StreamThread-2" java.lang.NullPointerException: Task was unexpectedly missing for partition table1-1
+         * 	at org.apache.kafka.streams.processor.internals.StreamThread.addRecordsToTasks(StreamThread.java:989)
+         * 	at org.apache.kafka.streams.processor.internals.StreamThread.runOnce(StreamThread.java:834)
+         * 	at org.apache.kafka.streams.processor.internals.StreamThread.runLoop(StreamThread.java:778)
+         * 	at org.apache.kafka.streams.processor.internals.StreamThread.run(StreamThread.java:748)
+         */
         //Use multiple partitions to ensure distribution of keys.
         CLUSTER.createTopic(TABLE_1, 11, 1);
         CLUSTER.createTopic(TABLE_2, 2, 1);
@@ -127,8 +134,6 @@ public class KTableKTableForeignKeyInnerJoinMultiIntegrationTest {
         streamsConfig.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0);
         streamsConfig.put(IntegrationTestUtils.INTERNAL_LEAVE_GROUP_ON_CLOSE, true);
         streamsConfig.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 100);
-
-
 
         final List<KeyValue<Integer, Float>> table1 = Arrays.asList(
             new KeyValue<>(1, 1.33f),
@@ -169,16 +174,6 @@ public class KTableKTableForeignKeyInnerJoinMultiIntegrationTest {
         CONSUMER_CONFIG.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
     }
 
-//    public static String bytesToHex(byte[] in) {
-//        final StringBuilder builder = new StringBuilder();
-//        for(byte b : in) {
-//            builder.append(String.format("%02x", b));
-//        }
-//        return builder.toString();
-//    }
-
-
-
     @Before
     public void before() throws IOException {
         IntegrationTestUtils.purgeLocalStreamsState(streamsConfig);
@@ -205,18 +200,14 @@ public class KTableKTableForeignKeyInnerJoinMultiIntegrationTest {
         INNER
     }
 
-//    @Test
-//    public void shouldInnerInnerJoinDelete() throws Exception {
-//        Set<KeyValue<Integer, String>> expected = new HashSet<>();
-//        expected.add(new KeyValue<>(1, null));
-//    }
-
     @Test
-    public void shouldInnerInnerJoinQueryable() throws Exception {
+    public void shouldInnerJoinMultiPartitionQueryable() throws Exception {
         Set<KeyValue<Integer, String>> expectedOne = new HashSet<>();
         expectedOne.add(new KeyValue<>(1, "value1=1.33,value2=10,value3=waffle"));
 
         verifyKTableKTableJoin(JoinType.INNER, expectedOne, true);
+
+        assert(false); //Manually failing because of Task exception.
     }
 
     private void verifyKTableKTableJoin(final JoinType joinType,
@@ -278,7 +269,6 @@ public class KTableKTableForeignKeyInnerJoinMultiIntegrationTest {
 
         ValueJoiner<Float, Long, String> joiner = (value1, value2) -> "value1=" + value1 + ",value2=" + value2;
         ValueJoiner<String, String, String> joinerTwo = (value1, value2) -> value1 + ",value3=" + value2;
-
 
         table1.join(table2, tableOneKeyExtractor, joiner, materialized)
               .join(table3, joinedTableKeyExtractor, joinerTwo, materializedTwo)

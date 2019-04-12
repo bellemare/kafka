@@ -58,24 +58,15 @@ public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements Proces
             @Override
             public void process(K key, SubscriptionResponseWrapper<VO> value) {
                 final V currentValue = originalSource.get(key);
-                Long random = new Random().nextLong();
 
                 long[] currentHash = (currentValue == null ?
                         Murmur3.hash128(new byte[]{}):
-                        Murmur3.hash128(valueSerializer.serialize(random + "", currentValue)));
-                        //Murmur3.hash128(valueSerializer.serialize(null, currentValue)));
-
-//                byte[] currentHash = null;
-//                try {
-//                    if (currentValue == null)
-//                        currentHash = Utils.md5(new byte[]{});
-//                    else
-//                        currentHash = Utils.md5(valueSerializer.serialize(null, currentValue));
-//                } catch (NoSuchAlgorithmException e) {
-//                    //TODO - Bellemare - figure out what to do with this
-//                    System.out.println("FATAL ERROR - NO MD5 HASH TO BE FOUND");
-//                    System.exit(-1);
-//                }
+                        //An extremely bad "workaround" for externalized testing with confluent avro serde.
+                        //If using just null, the schema is registered to <null>-topic -> "-topic", and of course
+                        //we do not want that at all. Will be removed in final version, but this just illustrates the
+                        //main issue with the confluent avro serde.
+                        //Murmur3.hash128(valueSerializer.serialize(new Random().nextLong() + "", currentValue)));
+                        Murmur3.hash128(valueSerializer.serialize(null, currentValue)));
 
                 final long[] messageHash = value.getOriginalValueHash();
 

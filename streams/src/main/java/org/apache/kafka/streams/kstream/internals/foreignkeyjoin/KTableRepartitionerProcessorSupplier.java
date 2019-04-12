@@ -55,13 +55,17 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
 
         @Override
         public void process(final K key, final Change<V> change) {
-            Long random = new Random().nextLong();
             long[] nullHash = Murmur3.hash128(new byte[]{});
 
             long[] currentHash = (change.newValue == null ?
                     Murmur3.hash128(new byte[]{}):
-                    Murmur3.hash128(valueSerializer.serialize(random + "", change.newValue)));
-                    //Murmur3.hash128(valueSerializer.serialize(null, change.newValue)));
+                    //An extremely bad "workaround" for externalized testing with confluent avro serde.
+                    //If using just null, the schema is registered to <null>-topic -> "-topic", and of course
+                    //we do not want that at all. Will be removed in final version, but this just illustrates the
+                    //main issue with the confluent avro serde.
+                    //Murmur3.hash128(valueSerializer.serialize(new Random().nextLong() + "", change.newValue)));
+                    Murmur3.hash128(valueSerializer.serialize(null, change.newValue)));
+
 
             if (change.oldValue != null) {
                 final KO oldForeignKey = mapper.apply(change.oldValue);

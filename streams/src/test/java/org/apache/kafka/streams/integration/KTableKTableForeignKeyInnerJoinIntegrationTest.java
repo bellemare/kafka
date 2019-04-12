@@ -98,8 +98,8 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
     @BeforeClass
     public static void beforeTest() throws Exception {
         //Use multiple partitions to ensure distribution of keys.
-        CLUSTER.createTopic(TABLE_1, 11, 1);
-        CLUSTER.createTopic(TABLE_2, 2, 1);
+        CLUSTER.createTopic(TABLE_1, 17, 1);
+        CLUSTER.createTopic(TABLE_2, 7, 1);
         CLUSTER.createTopic(OUTPUT, 13, 1);
 
         producerConfigOne.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
@@ -237,12 +237,6 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
     private enum JoinType {
         INNER
     }
-
-//    @Test
-//    public void shouldInnerInnerJoinDelete() throws Exception {
-//        Set<KeyValue<Integer, String>> expected = new HashSet<>();
-//        expected.add(new KeyValue<>(1, null));
-//    }
 
     @Test
     public void shouldInnerInnerJoinQueryable() throws Exception {
