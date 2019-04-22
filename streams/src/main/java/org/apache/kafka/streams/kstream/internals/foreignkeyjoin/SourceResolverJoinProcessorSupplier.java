@@ -58,15 +58,10 @@ public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements Proces
             @Override
             public void process(K key, SubscriptionResponseWrapper<VO> value) {
                 final V currentValue = originalSource.get(key);
-
+                final String topicName = context().applicationId() + "-" + context().topic() + "-recordhash";
                 long[] currentHash = (currentValue == null ?
                         Murmur3.hash128(new byte[]{}):
-                        //An extremely bad "workaround" for externalized testing with confluent avro serde.
-                        //If using just null, the schema is registered to <null>-topic -> "-topic", and of course
-                        //we do not want that at all. Will be removed in final version, but this just illustrates the
-                        //main issue with the confluent avro serde.
-                        //Murmur3.hash128(valueSerializer.serialize(new Random().nextLong() + "", currentValue)));
-                        Murmur3.hash128(valueSerializer.serialize(null, currentValue)));
+                        Murmur3.hash128(valueSerializer.serialize(topicName, currentValue)));
 
                 final long[] messageHash = value.getOriginalValueHash();
 

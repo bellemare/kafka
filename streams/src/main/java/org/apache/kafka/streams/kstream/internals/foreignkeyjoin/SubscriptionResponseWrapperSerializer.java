@@ -20,7 +20,7 @@ public class SubscriptionResponseWrapperSerializer<V> implements Serializer<Subs
     @Override
     public byte[] serialize(String topic, SubscriptionResponseWrapper<V> data) {
         //{16-bytes Hash}{n-bytes serialized data}
-        byte[] serializedData = serializer.serialize(null, data.getForeignValue());
+        byte[] serializedData = serializer.serialize(topic, data.getForeignValue());
         int length = (serializedData == null ? 0 : serializedData.length);
         final ByteBuffer buf = ByteBuffer.allocate(16 + length);
         long[] elem = data.getOriginalValueHash();
