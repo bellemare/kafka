@@ -58,10 +58,9 @@ public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements Proces
             @Override
             public void process(K key, SubscriptionResponseWrapper<VO> value) {
                 final V currentValue = originalSource.get(key);
-                final String topicName = context().applicationId() + "-" + context().topic() + "-recordhash";
                 long[] currentHash = (currentValue == null ?
                         Murmur3.hash128(new byte[]{}):
-                        Murmur3.hash128(valueSerializer.serialize(topicName, currentValue)));
+                        Murmur3.hash128(valueSerializer.serialize(context().topic(), currentValue)));
 
                 final long[] messageHash = value.getOriginalValueHash();
 

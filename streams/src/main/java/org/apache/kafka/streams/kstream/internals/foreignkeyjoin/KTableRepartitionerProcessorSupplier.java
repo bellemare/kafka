@@ -56,11 +56,9 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
         @Override
         public void process(final K key, final Change<V> change) {
             long[] nullHash = Murmur3.hash128(new byte[]{});
-            final String topicName = context().applicationId() + "-" + context().topic() + "-recordhash";
             long[] currentHash = (change.newValue == null ?
                     Murmur3.hash128(new byte[]{}):
-                    Murmur3.hash128(valueSerializer.serialize(topicName, change.newValue)));
-
+                    Murmur3.hash128(valueSerializer.serialize(context().topic(), change.newValue)));
 
             if (change.oldValue != null) {
                 final KO oldForeignKey = mapper.apply(change.oldValue);
