@@ -28,12 +28,12 @@ public class SubscriptionResponseWrapperSerde<V> implements Serde<SubscriptionRe
 
     @Override
     public Serializer<SubscriptionResponseWrapper<V>> serializer() {
-        return this.serializer;
+        return serializer;
     }
 
     @Override
     public Deserializer<SubscriptionResponseWrapper<V>> deserializer() {
-        return this.deserializer;
+        return deserializer;
     }
 
 }

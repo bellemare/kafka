@@ -39,23 +39,22 @@ class CombinedKeySerializer<KF, KP> implements Serializer<CombinedKey<KF, KP>> {
 
     @Override
     public byte[] serialize(final String topic, final CombinedKey<KF, KP> data) {
-        //{4-byte foreignKeyLength}{foreignKeySerialized}{primaryKeySerialized}
-        //? bytes
+        //{Integer.BYTES foreignKeyLength}{foreignKeySerialized}{primaryKeySerialized}
         final byte[] foreignKeySerializedData = foreignKeySerializer.serialize(topic, data.getForeignKey());
-        //4 bytes
+        //Integer.BYTES bytes
         final byte[] foreignKeyByteSize = numToBytes(foreignKeySerializedData.length);
 
         if (data.getPrimaryKey() != null) {
             //? bytes
             final byte[] primaryKeySerializedData = primaryKeySerializer.serialize(topic, data.getPrimaryKey());
 
-            final ByteBuffer buf = ByteBuffer.allocate(4 + foreignKeySerializedData.length + primaryKeySerializedData.length);
+            final ByteBuffer buf = ByteBuffer.allocate(Integer.BYTES + foreignKeySerializedData.length + primaryKeySerializedData.length);
             buf.put(foreignKeyByteSize);
             buf.put(foreignKeySerializedData);
             buf.put(primaryKeySerializedData);
             return buf.array();
         } else {
-            final ByteBuffer buf = ByteBuffer.allocate(4 + foreignKeySerializedData.length);
+            final ByteBuffer buf = ByteBuffer.allocate(Integer.BYTES + foreignKeySerializedData.length);
             buf.put(foreignKeyByteSize);
             buf.put(foreignKeySerializedData);
             return buf.array();
@@ -70,7 +69,7 @@ class CombinedKeySerializer<KF, KP> implements Serializer<CombinedKey<KF, KP>> {
 
     @Override
     public void close() {
-        this.foreignKeySerializer.close();
-        this.primaryKeySerializer.close();
+        foreignKeySerializer.close();
+        primaryKeySerializer.close();
     }
 }

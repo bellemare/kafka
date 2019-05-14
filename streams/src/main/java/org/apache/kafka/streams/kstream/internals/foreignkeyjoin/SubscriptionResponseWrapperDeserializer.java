@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
 import java.util.Map;
 
 public class SubscriptionResponseWrapperDeserializer<V> implements Deserializer<SubscriptionResponseWrapper<V>> {
-    private Deserializer<V> deserializer;
+    final private Deserializer<V> deserializer;
 
     public SubscriptionResponseWrapperDeserializer(Deserializer<V> deserializer) {
         this.deserializer = deserializer;

@@ -33,11 +33,11 @@ public class SubscriptionWrapperSerde implements Serde {
 
     @Override
     public Serializer serializer() {
-        return this.serializer;
+        return serializer;
     }
 
     @Override
     public Deserializer deserializer() {
-        return this.deserializer;
+        return deserializer;
     }
 }

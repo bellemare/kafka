@@ -19,7 +19,7 @@ package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 public class CombinedKey<KF, KP> {
     private final KF foreignKey;
-    private KP primaryKey = null;
+    private final KP primaryKey;
 
     public CombinedKey(final KF foreignKey, final KP primaryKey) {
         this.foreignKey = foreignKey;
@@ -28,18 +28,19 @@ public class CombinedKey<KF, KP> {
 
     public CombinedKey(final KF foreignKey) {
         this.foreignKey = foreignKey;
+        this.primaryKey = null;
     }
 
     public KF getForeignKey() {
-        return this.foreignKey;
+        return foreignKey;
     }
 
     public KP getPrimaryKey() {
-        return this.primaryKey;
+        return primaryKey;
     }
 
     public boolean equals(final KF foreignKey, final KP primaryKey) {
-        return this.foreignKey.equals(foreignKey) && this.primaryKey.equals(primaryKey);
+        return foreignKey.equals(foreignKey) && primaryKey.equals(primaryKey);
     }
 
     @Override

@@ -46,10 +46,10 @@ class CombinedKeyDeserializer<KF, KP> implements Deserializer<CombinedKey<KF, KP
         buf.get(foreignKeyRaw, 0, foreignKeyLength);
         final KF foreignKey = foreignKeyDeserializer.deserialize(topic, foreignKeyRaw);
 
-        if (data.length == 4 + foreignKeyLength) {
+        if (data.length == Integer.BYTES + foreignKeyLength) {
             return new CombinedKey<>(foreignKey);
         } else {
-            final byte[] primaryKeyRaw = new byte[data.length - foreignKeyLength - 4];
+            final byte[] primaryKeyRaw = new byte[data.length - foreignKeyLength - Integer.BYTES];
             buf.get(primaryKeyRaw, 0, primaryKeyRaw.length);
             final KP primaryKey = primaryKeyDeserializer.deserialize(topic, primaryKeyRaw);
             return new CombinedKey<>(foreignKey, primaryKey);
@@ -61,13 +61,4 @@ class CombinedKeyDeserializer<KF, KP> implements Deserializer<CombinedKey<KF, KP
         foreignKeyDeserializer.close();
         primaryKeyDeserializer.close();
     }
-
-    private int fourBytesToInt(final byte[] fourBytes) {
-        if (fourBytes.length != 4) {
-            throw new ArrayIndexOutOfBoundsException("Expected 4 bytes when deserializing the CombinedKey! Found " + fourBytes.length);
-        }
-        final ByteBuffer wrapped = ByteBuffer.wrap(fourBytes);
-        return wrapped.getInt();
-    }
-
 }

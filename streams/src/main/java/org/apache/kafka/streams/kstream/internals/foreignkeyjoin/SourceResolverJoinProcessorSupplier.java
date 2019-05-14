@@ -52,7 +52,7 @@ public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements Proces
             @Override
             public void init(final ProcessorContext context) {
                 super.init(context);
-                this.originalSource = (KeyValueStore<K, V>) context.getStateStore(stateStoreName);
+                originalSource = (KeyValueStore<K, V>) context.getStateStore(stateStoreName);
             }
 
             @Override

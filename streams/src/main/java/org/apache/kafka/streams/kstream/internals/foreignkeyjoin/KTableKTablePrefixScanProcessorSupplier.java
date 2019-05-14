@@ -49,7 +49,7 @@ public class KTableKTablePrefixScanProcessorSupplier<K, KO, VO> implements Proce
         private final KTablePrefixValueGetter<CombinedKey<KO, K>, SubscriptionWrapper> prefixValueGetter;
 
         public KTableKTableJoinProcessor(final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, SubscriptionWrapper> valueGetter) {
-            this.prefixValueGetter = valueGetter.get();
+            prefixValueGetter = valueGetter.get();
         }
 
         @SuppressWarnings("unchecked")

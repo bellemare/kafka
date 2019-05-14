@@ -418,18 +418,6 @@ public final class Utils {
         return h;
     }
 
-    //TODO - Bellemare - This can be removed if we stick with Murmur3, which I think we should.
-    /**
-     * Generates an md5 hash from the byte array
-     * @param data byte array to hash
-     * @return 128 bit hash of the given array
-     * @throws java.security.NoSuchAlgorithmException
-     */
-    public static byte[] md5(final byte[] data) throws java.security.NoSuchAlgorithmException {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        return md.digest(data);
-    }
-
     /**
      * Extracts the hostname from a "host:port" address string.
      * @param address address string to parse

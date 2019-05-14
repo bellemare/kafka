@@ -20,23 +20,22 @@ package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.processor.StreamPartitioner;
 
-public class DefaultCombinedKeyPartitioner<KO, K, V> implements StreamPartitioner<CombinedKey<KO, K>, V> {
+/**
+ * Partition the CombinedKey by the foreign key only. Does not include the primary key in the partitioning strategy.
+ * @param <KO> The foreign key type
+ * @param <K> The primary key type
+ * @param <V> The value type
+ */
+public class CombinedKeyForeignKeyPartitioner<KO, K, V> implements StreamPartitioner<CombinedKey<KO, K>, V> {
     private final CombinedKeySerde<KO, K> keySerde;
-    private final boolean byPrimaryKey;
 
-    //Use a custom partitioner.
-    public DefaultCombinedKeyPartitioner(final CombinedKeySerde<KO, K> keySerde, final boolean byPrimaryKey) {
+    public CombinedKeyForeignKeyPartitioner(final CombinedKeySerde<KO, K> keySerde) {
         this.keySerde = keySerde;
-        this.byPrimaryKey = byPrimaryKey;
     }
 
     @Override
     public Integer partition(final String topic, final CombinedKey<KO, K> key, final V value, final int numPartitions) {
-        byte[] keyBytes;
-        if (byPrimaryKey)
-            keyBytes = keySerde.getPrimaryKeySerializer().serialize(topic, key.getPrimaryKey());
-        else
-            keyBytes = keySerde.getForeignKeySerializer().serialize(topic, key.getForeignKey());
+        byte[] keyBytes = keySerde.getForeignKeySerializer().serialize(topic, key.getForeignKey());
         //TODO - Evaluate breaking this out of the DefaultPartitioner Producer into an accessible function.
         return Utils.toPositive(Utils.murmur2(keyBytes)) % numPartitions;
     }
