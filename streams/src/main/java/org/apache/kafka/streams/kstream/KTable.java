@@ -1142,12 +1142,11 @@ public interface KTable<K, V> {
                                      final Materialized<K, VR, KeyValueStore<Bytes, byte[]>> materialized);
 
     /**
-     * Joins the records of this KTable to another table keyed on a different key. Updates from this table will join
-     * 1 to 1 on the other table. Updates to the other table will induce a join on each record in this table that has
-     * that specific foreign key.
      *
-     * @param other the table containing the records to be joined on. Keyed by KO.
-     * @param foreignKeyExtractor extracts the key (KO) from this table's value (V).
+     * A many:1 join with the other table. The foreignKeyExtractor selects the key to join with the other table.
+     *
+     * @param other the table containing the records to be joined on. Keyed by KO
+     * @param foreignKeyExtractor extracts the key (KO) from this table's value (V)
      * @param joiner specifies how to join the records from both tables
      * @param materialized the materialized output store
      * @param <VR> the value type of the result {@code KTable}

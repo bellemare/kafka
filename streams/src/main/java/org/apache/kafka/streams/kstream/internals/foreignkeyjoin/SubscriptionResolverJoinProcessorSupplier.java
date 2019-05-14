@@ -31,14 +31,14 @@ import org.apache.kafka.streams.state.KeyValueStore;
 import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 
-public class SourceResolverJoinProcessorSupplier<K, V, VO, VR> implements ProcessorSupplier<K, SubscriptionResponseWrapper<VO>> {
+public class SubscriptionResolverJoinProcessorSupplier<K, V, VO, VR> implements ProcessorSupplier<K, SubscriptionResponseWrapper<VO>> {
     private final String stateStoreName;
     private final Serializer<V> valueSerializer;
     private final ValueJoiner<V, VO, VR> joiner;
 
-    public SourceResolverJoinProcessorSupplier(final String stateStoreName,
-                                               final Serializer<V> valueSerializer,
-                                               final ValueJoiner<V, VO, VR> joiner) {
+    public SubscriptionResolverJoinProcessorSupplier(final String stateStoreName,
+                                                     final Serializer<V> valueSerializer,
+                                                     final ValueJoiner<V, VO, VR> joiner) {
         this.stateStoreName = stateStoreName;
         this.valueSerializer = valueSerializer;
         this.joiner = joiner;

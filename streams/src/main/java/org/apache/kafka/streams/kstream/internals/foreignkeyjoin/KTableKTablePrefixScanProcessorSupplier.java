@@ -65,20 +65,16 @@ public class KTableKTablePrefixScanProcessorSupplier<K, KO, VO> implements Proce
         @Override
         public void process(final KO key, final Change<VO> value) {
             if (key == null)
-                throw new StreamsException("Record key for KTable foreignKeyJoin operator should not be null.");
+                throw new StreamsException("Record key for foreignKeyJoin operator should not be null.");
 
             //Don't do any work if the value hasn't changed.
-            //It can be expensive to update all the records returned from the prefixScan.
+            //It can be expensive to update all the records returned from prefixScan.
             if (value.oldValue == value.newValue)
                 return;
 
-
-
-            //Wrap it in a combinedKey and let the serializer handle the prefixing.
             final CombinedKey<KO, K> prefixKey = new CombinedKey<>(key);
-
+            //Perform the prefixScan and propagate the results
             final KeyValueIterator<CombinedKey<KO, K>, SubscriptionWrapper> prefixScanResults = prefixValueGetter.prefixScan(prefixKey);
-
             while (prefixScanResults.hasNext()) {
                 final KeyValue<CombinedKey<KO, K>, SubscriptionWrapper> scanResult = prefixScanResults.next();
                 context().forward(scanResult.key.getPrimaryKey(), new SubscriptionResponseWrapper<>(scanResult.value.getHash(), value.newValue));

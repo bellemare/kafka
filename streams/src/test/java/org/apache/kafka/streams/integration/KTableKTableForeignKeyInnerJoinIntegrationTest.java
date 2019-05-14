@@ -48,8 +48,7 @@ import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionRes
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperDeserializer;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperSerializer;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperDeserializer;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerializer;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerde;
 import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.QueryableStoreTypes;
@@ -162,12 +161,11 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
 //        String foo = bytesToHex(md5Null).toString();
 //        System.out.println(foo);
 
-        SubscriptionWrapperSerializer sws = new SubscriptionWrapperSerializer();
-        SubscriptionWrapperDeserializer swd = new SubscriptionWrapperDeserializer();
+        SubscriptionWrapperSerde swSerde = new SubscriptionWrapperSerde();
         long[] hashedValue = Murmur3.hash128(new byte[]{(byte)(0xFF), (byte)(0xFF), (byte)(0xFF), (byte)(0xFF)});
         SubscriptionWrapper wrapper = new SubscriptionWrapper(hashedValue, false);
-        byte[] serialized = sws.serialize(null, wrapper);
-        SubscriptionWrapper deserialized = swd.deserialize(null, serialized);
+        byte[] serialized = swSerde.serializer().serialize(null, wrapper);
+        SubscriptionWrapper deserialized = (SubscriptionWrapper)swSerde.deserializer().deserialize(null, serialized);
 
         assert(!deserialized.isPropagate());
         assert(java.util.Arrays.equals(deserialized.getHash(),hashedValue));

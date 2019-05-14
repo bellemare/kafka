@@ -20,6 +20,7 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 
 /**
@@ -75,4 +76,99 @@ public class CombinedKeySerde<KO, K> implements Serde<CombinedKey<KO, K>> {
     public Serializer<K> getPrimaryKeySerializer() {
         return this.primaryKeySerializer;
     }
+
+    class CombinedKeySerializer<KF, KP> implements Serializer<CombinedKey<KF, KP>> {
+
+        private final Serializer<KF> foreignKeySerializer;
+        private final Serializer<KP> primaryKeySerializer;
+
+        public CombinedKeySerializer(final Serializer<KF> foreignKeySerializer, final Serializer<KP> primaryKeySerializer) {
+            this.foreignKeySerializer = foreignKeySerializer;
+            this.primaryKeySerializer = primaryKeySerializer;
+        }
+
+        @Override
+        public void configure(final Map<String, ?> configs, final boolean isKey) {
+            //Don't need to configure, they are already configured. This is just a wrapper.
+        }
+
+        @Override
+        public byte[] serialize(final String topic, final CombinedKey<KF, KP> data) {
+            //{Integer.BYTES foreignKeyLength}{foreignKeySerialized}{primaryKeySerialized}
+            final byte[] foreignKeySerializedData = foreignKeySerializer.serialize(topic, data.getForeignKey());
+            //Integer.BYTES bytes
+            final byte[] foreignKeyByteSize = numToBytes(foreignKeySerializedData.length);
+
+            if (data.getPrimaryKey() != null) {
+                //? bytes
+                final byte[] primaryKeySerializedData = primaryKeySerializer.serialize(topic, data.getPrimaryKey());
+
+                final ByteBuffer buf = ByteBuffer.allocate(Integer.BYTES + foreignKeySerializedData.length + primaryKeySerializedData.length);
+                buf.put(foreignKeyByteSize);
+                buf.put(foreignKeySerializedData);
+                buf.put(primaryKeySerializedData);
+                return buf.array();
+            } else {
+                final ByteBuffer buf = ByteBuffer.allocate(Integer.BYTES + foreignKeySerializedData.length);
+                buf.put(foreignKeyByteSize);
+                buf.put(foreignKeySerializedData);
+                return buf.array();
+            }
+        }
+
+        private byte[] numToBytes(final int num) {
+            final ByteBuffer wrapped = ByteBuffer.allocate(4);
+            wrapped.putInt(num);
+            return wrapped.array();
+        }
+
+        @Override
+        public void close() {
+            foreignKeySerializer.close();
+            primaryKeySerializer.close();
+        }
+    }
+
+    class CombinedKeyDeserializer<KF, KP> implements Deserializer<CombinedKey<KF, KP>> {
+
+        private final Deserializer<KF> foreignKeyDeserializer;
+        private final Deserializer<KP> primaryKeyDeserializer;
+
+
+        public CombinedKeyDeserializer(final Deserializer<KF> foreignKeyDeserializer, final Deserializer<KP> primaryKeyDeserializer) {
+            this.foreignKeyDeserializer = foreignKeyDeserializer;
+            this.primaryKeyDeserializer = primaryKeyDeserializer;
+        }
+
+        @Override
+        public void configure(final Map<String, ?> configs, final boolean isKey) {
+            //Don't need to configure them, as they are already configured. This is only a wrapper.
+        }
+
+        @Override
+        public CombinedKey<KF, KP> deserialize(final String topic, final byte[] data) {
+            final ByteBuffer buf = ByteBuffer.wrap(data);
+            final int foreignKeyLength = buf.getInt();
+            final byte[] foreignKeyRaw = new byte[foreignKeyLength];
+            buf.get(foreignKeyRaw, 0, foreignKeyLength);
+            final KF foreignKey = foreignKeyDeserializer.deserialize(topic, foreignKeyRaw);
+
+            if (data.length == Integer.BYTES + foreignKeyLength) {
+                return new CombinedKey<>(foreignKey);
+            } else {
+                final byte[] primaryKeyRaw = new byte[data.length - foreignKeyLength - Integer.BYTES];
+                buf.get(primaryKeyRaw, 0, primaryKeyRaw.length);
+                final KP primaryKey = primaryKeyDeserializer.deserialize(topic, primaryKeyRaw);
+                return new CombinedKey<>(foreignKey, primaryKey);
+            }
+        }
+
+        @Override
+        public void close() {
+            foreignKeyDeserializer.close();
+            primaryKeyDeserializer.close();
+        }
+    }
+
+
 }
