@@ -11,10 +11,10 @@ public class SubscriptionResponseWrapperSerde<V> implements Serde<SubscriptionRe
     private final SubscriptionResponseWrapperSerializer<V> serializer;
     private final SubscriptionResponseWrapperDeserializer<V> deserializer;
 
-    public SubscriptionResponseWrapperSerde(final SubscriptionResponseWrapperSerializer<V> serializer,
-                                            final SubscriptionResponseWrapperDeserializer<V> deserializer) {
-        this.serializer = serializer;
-        this.deserializer = deserializer;
+    public SubscriptionResponseWrapperSerde(final Serializer<V> serializer,
+                                            final Deserializer<V> deserializer) {
+        this.serializer = new SubscriptionResponseWrapperSerializer<>(serializer);
+        this.deserializer = new SubscriptionResponseWrapperDeserializer<>(deserializer);
     }
 
     @Override

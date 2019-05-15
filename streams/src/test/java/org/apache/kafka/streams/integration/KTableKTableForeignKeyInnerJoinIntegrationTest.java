@@ -45,8 +45,6 @@ import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapper;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperDeserializer;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperSerializer;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerde;
 import org.apache.kafka.streams.state.KeyValueIterator;
@@ -170,20 +168,20 @@ public class KTableKTableForeignKeyInnerJoinIntegrationTest {
         assert(!deserialized.isPropagate());
         assert(java.util.Arrays.equals(deserialized.getHash(),hashedValue));
 
-        SubscriptionResponseWrapper<String> srw = new SubscriptionResponseWrapper<>(hashedValue, null);
-        SubscriptionResponseWrapperSerializer<String> ser = new SubscriptionResponseWrapperSerializer<>(Serdes.String().serializer());
-        SubscriptionResponseWrapperDeserializer<String> deser = new SubscriptionResponseWrapperDeserializer<>(Serdes.String().deserializer());
-
-        byte[] serResponse = ser.serialize(null, srw);
-        SubscriptionResponseWrapper<String> result = deser.deserialize(null, serResponse);
-
-
-        byte[] stringResults = Serdes.String().serializer().serialize(null, null);
-        String dataadas = Serdes.String().deserializer().deserialize(null, stringResults);
-
-
-        assert(java.util.Arrays.equals(result.getOriginalValueHash(), hashedValue));
-        assert(result.getForeignValue() == null);
+//        SubscriptionResponseWrapper<String> srw = new SubscriptionResponseWrapper<>(hashedValue, null);
+//        SubscriptionResponseWrapperSerializer<String> ser = new SubscriptionResponseWrapperSerializer<>(Serdes.String().serializer());
+//        SubscriptionResponseWrapperDeserializer<String> deser = new SubscriptionResponseWrapperDeserializer<>(Serdes.String().deserializer());
+//
+//        byte[] serResponse = ser.serialize(null, srw);
+//        SubscriptionResponseWrapper<String> result = deser.deserialize(null, serResponse);
+//
+//
+//        byte[] stringResults = Serdes.String().serializer().serialize(null, null);
+//        String dataadas = Serdes.String().deserializer().deserialize(null, stringResults);
+//
+//
+//        assert(java.util.Arrays.equals(result.getOriginalValueHash(), hashedValue));
+//        assert(result.getForeignValue() == null);
 
 
 //        long[] hashNull = Murmur3.hash128(new byte[]{});

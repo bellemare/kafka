@@ -41,9 +41,7 @@ import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableKTablePre
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableRepartitionerProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResolverJoinProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapper;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperDeserializer;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperSerde;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperSerializer;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerde;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableForeignKeyJoinResolutionNode;
@@ -793,8 +791,8 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 finalRepartitionSourceName,
                 keySerde,
                 new SubscriptionResponseWrapperSerde<>(
-                        new SubscriptionResponseWrapperSerializer<>(((KTableImpl<KO, VO, VO>) other).valSerde.serializer()),
-                        new SubscriptionResponseWrapperDeserializer<>(((KTableImpl<KO, VO, VO>) other).valSerde.deserializer())
+                        ((KTableImpl<KO, VO, VO>) other).valSerde.serializer(),
+                        ((KTableImpl<KO, VO, VO>) other).valSerde.deserializer()
                 ),
                 valueGetterSupplier()
                 );
