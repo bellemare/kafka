@@ -195,6 +195,14 @@ public class ThreadCache {
         }
         return new MemoryLRUCacheBytesIterator(cache.allKeys(), cache);
     }
+
+    public MemoryLRUCacheBytesIterator prefix(final String namespace, final Bytes prefix) {
+        final NamedCache cache = getCache(namespace);
+        if (cache == null) {
+            return new MemoryLRUCacheBytesIterator(Collections.<Bytes>emptyIterator(), new NamedCache(namespace, this.metrics));
+        }
+        return new MemoryLRUCacheBytesIterator(cache.subMapPrefixIterator(prefix), new NamedCache(namespace, this.metrics));
+    }
     
     public long size() {
         long size = 0;

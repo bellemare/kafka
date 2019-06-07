@@ -99,6 +99,23 @@ public class CompositeReadOnlyKeyValueStore<K, V> implements ReadOnlyKeyValueSto
     }
 
     @Override
+    public KeyValueIterator<K, V> prefixScan(final K prefix) {
+        Objects.requireNonNull(prefix);
+        final NextIteratorFunction<K, V, ReadOnlyKeyValueStore<K, V>> nextIteratorFunction = new NextIteratorFunction<K, V, ReadOnlyKeyValueStore<K, V>>() {
+            @Override
+            public KeyValueIterator<K, V> apply(final ReadOnlyKeyValueStore<K, V> store) {
+                try {
+                    return store.prefixScan(prefix);
+                } catch (InvalidStateStoreException e) {
+                    throw new InvalidStateStoreException("State store is not available anymore and may have been migrated to another instance; please re-discover its location from the state metadata.");
+                }
+            }
+        };
+        final List<ReadOnlyKeyValueStore<K, V>> stores = storeProvider.stores(storeName, storeType);
+        return new DelegatingPeekingKeyValueIterator<>(storeName, new CompositeKeyValueIterator<>(stores.iterator(), nextIteratorFunction));
+    }
+
+    @Override
     public long approximateNumEntries() {
         final List<ReadOnlyKeyValueStore<K, V>> stores = storeProvider.stores(storeName, storeType);
         long total = 0;

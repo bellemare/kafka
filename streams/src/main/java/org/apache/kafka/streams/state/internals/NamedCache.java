@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -264,6 +265,12 @@ class NamedCache {
 
     public long size() {
         return cache.size();
+    }
+
+    synchronized Iterator<Bytes> subMapPrefixIterator(final Bytes prefix) {
+        final byte[] prefixEnd = Arrays.copyOf(prefix.get(), prefix.get().length + 1);
+        prefixEnd[prefixEnd.length-1] = (byte)0xFF;
+        return keySetIterator(cache.navigableKeySet().subSet(prefix, new Bytes(prefixEnd)));
     }
 
     synchronized Iterator<Bytes> keyRange(final Bytes from, final Bytes to) {
