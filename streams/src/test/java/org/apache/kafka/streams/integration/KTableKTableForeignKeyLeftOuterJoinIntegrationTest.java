@@ -50,20 +50,17 @@ import org.junit.experimental.categories.Category;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.junit.Assert.*;
 
 @Category({IntegrationTest.class})
-public class KTableKTableForeignKeyJoinIntegrationTest {
+public class KTableKTableForeignKeyLeftOuterJoinIntegrationTest {
     private final static int NUM_BROKERS = 1;
 
     @ClassRule
@@ -75,6 +72,7 @@ public class KTableKTableForeignKeyJoinIntegrationTest {
     private static Properties streamsConfig;
     private KafkaStreams streams;
     private final static Properties CONSUMER_CONFIG = new Properties();
+    private final static Properties producerConfig = new Properties();
 
     @BeforeClass
     public static void beforeTest() throws Exception {
@@ -90,22 +88,24 @@ public class KTableKTableForeignKeyJoinIntegrationTest {
         streamsConfig.put(IntegrationTestUtils.INTERNAL_LEAVE_GROUP_ON_CLOSE, true);
         streamsConfig.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 100);
 
-        final Properties producerConfig = new Properties();
         producerConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
         producerConfig.put(ProducerConfig.ACKS_CONFIG, "all");
         producerConfig.put(ProducerConfig.RETRIES_CONFIG, 0);
         producerConfig.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         producerConfig.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 
+
         final List<KeyValue<String, String>> table1 = Arrays.asList(
             new KeyValue<>("a", "1,A1"),
             new KeyValue<>("b", "1,B1"),
-            new KeyValue<>("c", "3,C1")
+            new KeyValue<>("c", "3,C1"),
+            new KeyValue<>("d", "4,D1")
         );
 
         final List<KeyValue<String, String>> table2 = Arrays.asList(
             new KeyValue<>("1", "E8"),
-            new KeyValue<>("2", "E9")
+            new KeyValue<>("2", "E9"),
+            new KeyValue<>("4", "E10")
         );
 
         IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1, producerConfig, MOCK_TIME);
@@ -131,32 +131,41 @@ public class KTableKTableForeignKeyJoinIntegrationTest {
         IntegrationTestUtils.purgeLocalStreamsState(streamsConfig);
     }
 
-    private enum JoinType {
-        INNER
-    }
-
-
-//    @Test
-//    public void shouldInnerInnerJoin() throws InterruptedException {
-//        verifyKTableKTableJoin(JoinType.INNER, JoinType.INNER, Collections.singletonList(new KeyValue<>("b", "B1-B2-B3")), false);
-//    }
-
     @Test
     public void shouldInnerInnerJoinQueryable() throws InterruptedException {
         List<KeyValue<String, String>> expected = new ArrayList<>();
         expected.add(new KeyValue<>("a", "value1=1,A1,value2=E8"));
         expected.add(new KeyValue<>("b", "value1=1,B1,value2=E8"));
-        verifyKTableKTableJoin(JoinType.INNER, JoinType.INNER, expected, true);
+        expected.add(new KeyValue<>("c", "value1=3,C1,value2=null"));
+        KeyValue deletableElement = new KeyValue<>("d", "value1=4,D1,value2=E10");
+        expected.add(deletableElement);
+        String queryableName = "someName";
+        verifyKTableKTableJoin(expected, queryableName, true);
+
+        final List<KeyValue<String, String>> table2 = Arrays.asList(
+                new KeyValue<>("4", (String)null)
+        );
+        try {
+            IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_2, table2, producerConfig, MOCK_TIME);
+        } catch (ExecutionException e){
+            System.out.println("Failing due to exception " + e.getMessage());
+        }
+
+        //Hacky way to allow kafka to propagate the deletion. Would normally rewrite the test to be a bit better
+        //but hey, someone after me needs to have something to fix right?
+        Thread.sleep(8000);
+        expected.remove(deletableElement);
+        KeyValue leftJoinedElement = new KeyValue<>("d", "value1=4,D1,value2=null");
+        expected.add(leftJoinedElement);
+        verifyKTableKTableJoinQueryableState(expected, queryableName);
     }
 
-    private void verifyKTableKTableJoin(final JoinType joinType1,
-                                        final JoinType joinType2,
-                                        final List<KeyValue<String, String>> expectedResult,
+    private void verifyKTableKTableJoin(final List<KeyValue<String, String>> expectedResult,
+                                        String queryableName,
                                         boolean verifyQueryableState) throws InterruptedException {
-        final String queryableName = verifyQueryableState ? joinType1 + "-" + joinType2 + "-ktable-ktable-joinOnForeignKey-query" : null;
-        streamsConfig.put(StreamsConfig.APPLICATION_ID_CONFIG, joinType1 + "-" + joinType2 + "-ktable-ktable-joinOnForeignKey" + queryableName);
+        streamsConfig.put(StreamsConfig.APPLICATION_ID_CONFIG, "-ktable-ktable-left-join-joinOnForeignKey" + queryableName);
 
-        streams = prepareTopology(joinType1, joinType2, queryableName);
+        streams = prepareTopology(queryableName);
         streams.start();
 
         final List<KeyValue<String, String>> result = IntegrationTestUtils.waitUntilMinKeyValueRecordsReceived(
@@ -167,14 +176,11 @@ public class KTableKTableForeignKeyJoinIntegrationTest {
         assertThat(result, equalTo(expectedResult));
 
         if (verifyQueryableState) {
-            verifyKTableKTableJoinQueryableState(joinType1, joinType2, expectedResult);
+            verifyKTableKTableJoinQueryableState(expectedResult, queryableName);
         }
     }
 
-    private void verifyKTableKTableJoinQueryableState(final JoinType joinType1,
-                                                      final JoinType joinType2,
-                                                      final List<KeyValue<String, String>> expectedResult) {
-        final String queryableName = joinType1 + "-" + joinType2 + "-ktable-ktable-joinOnForeignKey-query";
+    private void verifyKTableKTableJoinQueryableState(final List<KeyValue<String, String>> expectedResult, String queryableName) {
         final ReadOnlyKeyValueStore<String, String> myJoinStore = streams.store(queryableName,
             QueryableStoreTypes.<String, String>keyValueStore());
 
@@ -193,10 +199,9 @@ public class KTableKTableForeignKeyJoinIntegrationTest {
             assertTrue(expectedResult.contains(storeEntry));
         }
         all.close();
-
     }
 
-    private KafkaStreams prepareTopology(final JoinType joinType1, final JoinType joinType2, final String queryableName) {
+    private KafkaStreams prepareTopology(final String queryableName) {
         final StreamsBuilder builder = new StreamsBuilder();
 
         final KTable<String, String> table1 = builder.table(TABLE_1);
@@ -228,7 +233,7 @@ public class KTableKTableForeignKeyJoinIntegrationTest {
             }
         };
 
-        table1.joinOnForeignKey(table2, tableOneKeyExtractor, joiner, materialized,
+        table1.joinOnForeignKey(table2, tableOneKeyExtractor, joiner, materialized, true,
                 Serdes.String(), Serdes.String(), Serdes.String(), Serdes.String())
             .toStream()
             .to(OUTPUT, Produced.with(Serdes.String(), Serdes.String()));

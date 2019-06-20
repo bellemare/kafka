@@ -19,14 +19,17 @@ public class KTableKTablePrefixScanJoin<KL, KR, VL, VR, V> implements ProcessorS
 	private final ValueJoiner<VL, VR, V> joiner;
 	private final KTableRangeValueGetterSupplier<CombinedKey<KR, KL>, VL> primary;
 	private final StateStore ref;
+	private final boolean leftOuter;
 
     public KTableKTablePrefixScanJoin(KTableRangeValueGetterSupplier<CombinedKey<KR, KL>,VL> primary,
                                       ValueJoiner<VL, VR, V> joiner,
-                                      StateStore ref){
+                                      StateStore ref,
+                                      boolean leftOuter){
 
     	this.primary = primary;
         this.joiner = joiner;
         this.ref = ref;
+        this.leftOuter = leftOuter;
     }
 
 	@Override
@@ -77,17 +80,18 @@ public class KTableKTablePrefixScanJoin<KL, KR, VL, VR, V> implements ProcessorS
                 results = true;
 //                System.out.println("PrefixScan scan-result (" + rightKeyValue.key.toString() +", " + rightKeyValue.value.toString() + ")");
 
-
                 KL realKey = rightKeyValue.key.getPrimaryKey();
                 VL value2 = rightKeyValue.value;
                 V newValue = null;
                 V oldValue = null;
 
-                if (change.oldValue != null) {
+                //TODO Done - leftjoin logic needs to be here?
+                if (change.oldValue != null || leftOuter) {
                     oldValue = joiner.apply(value2, change.oldValue);
                 }
 
-                if (change.newValue != null){
+                //TODO DONE - leftjoin logic needs to be here? Only needs to handle null change.newValue
+                if (change.newValue != null || leftOuter){
                     newValue = joiner.apply(value2, change.newValue);
                 }
                 //TODO - Possibly rework this so that it's a different wrapper. We don't need the printable part anymore, but it's annoying to have to create another nearly-the-same class.

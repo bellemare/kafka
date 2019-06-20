@@ -19,15 +19,18 @@ public class LeftSideProcessorSupplier<KL, KR, VL, VR, V>
     private final String topicName;
     private final KTableValueGetterSupplier<KR, VR> foreignValueGetterSupplier;
     private final ValueJoiner<VL, VR, V> joiner;
+    private final boolean leftOuter;
 
     //Right driven updates
     public LeftSideProcessorSupplier(String topicName,
                                      KTableValueGetterSupplier<KR, VR> foreignValueGetter,
-                                     ValueJoiner<VL, VR, V> joiner)
+                                     ValueJoiner<VL, VR, V> joiner,
+                                     boolean leftOuter)
     {
         this.topicName = topicName;
         this.joiner = joiner;
 	    this.foreignValueGetterSupplier = foreignValueGetter;
+	    this.leftOuter = leftOuter;
     }
 
 
@@ -78,8 +81,11 @@ public class LeftSideProcessorSupplier<KL, KR, VL, VR, V>
 //                    System.out.println("LeftSide - FK Get Result (" + d +", " + value2 + ")");
                 }
 
-                if (value.getElem() != null && value2 != null)
-                    newValue = joiner.apply(value.getElem(), value2);
+                if (value.getElem() != null)
+                    if (!leftOuter && value2 != null)  //inner join
+                        newValue = joiner.apply(value.getElem(), value2);
+                    else if (leftOuter)  //left outer
+                        newValue = joiner.apply(value.getElem(), value2);
 
                 if (oldVal != null && value2 != null)
                     oldValue = joiner.apply(oldVal, value2);
