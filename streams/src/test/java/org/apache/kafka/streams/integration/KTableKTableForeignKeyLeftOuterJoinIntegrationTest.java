@@ -243,7 +243,7 @@ public class KTableKTableForeignKeyLeftOuterJoinIntegrationTest {
             }
         };
 
-        table1.joinOnForeignKey(table2, tableOneKeyExtractor, joiner, materialized, true,
+        table1.leftJoinOnForeignKey(table2, tableOneKeyExtractor, joiner, materialized,
                 Serdes.String(), Serdes.String(), Serdes.String(), Serdes.String())
             .toStream()
             .to(OUTPUT, Produced.with(Serdes.String(), Serdes.String()));

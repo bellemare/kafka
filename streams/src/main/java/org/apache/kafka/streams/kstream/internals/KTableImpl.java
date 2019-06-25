@@ -869,58 +869,53 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                                                                 final ValueJoiner<VL, VR, V0> joiner,
                                                                 final Materialized<KL, V0, KeyValueStore<Bytes, byte[]>> materialized,
                                                                 final StreamPartitioner<KR,?> foreignKeyPartitioner,
-                                                                final boolean leftOuter,
                                                                 final Serde<KL> thisKeySerde,
                                                                 final Serde<VL> thisValueSerde,
                                                                 final Serde<KR> otherKeySerde,
                                                                 final Serde<V0> joinedValueSerde) {
 
-        return doJoinOnForeignKey(other, keyExtractor, joiner, new MaterializedInternal<>(materialized, builder, MERGE_NAME),
-                foreignKeyPartitioner, leftOuter, thisKeySerde, thisValueSerde, otherKeySerde, joinedValueSerde);
+        return buildJoinOnForeignKey(other, keyExtractor, joiner, new MaterializedInternal<>(materialized, builder, MERGE_NAME),
+                foreignKeyPartitioner, false, thisKeySerde, thisValueSerde, otherKeySerde, joinedValueSerde);
     }
 
     public <V0, KL, VL, KR, VR> KTable<KL, V0> joinOnForeignKey(final KTable<KR, VR> other,
                                                                 final ValueMapper<VL, KR> keyExtractor,
                                                                 final ValueJoiner<VL, VR, V0> joiner,
                                                                 final Materialized<KL, V0, KeyValueStore<Bytes, byte[]>> materialized,
-                                                                final boolean leftOuter,
                                                                 final Serde<KL> thisKeySerde,
                                                                 final Serde<VL> thisValueSerde,
                                                                 final Serde<KR> otherKeySerde,
                                                                 final Serde<V0> joinedValueSerde) {
 
-        return doJoinOnForeignKey(other, keyExtractor, joiner, new MaterializedInternal<>(materialized, builder, MERGE_NAME),
-                null, leftOuter, thisKeySerde, thisValueSerde, otherKeySerde, joinedValueSerde);
+        return buildJoinOnForeignKey(other, keyExtractor, joiner, new MaterializedInternal<>(materialized, builder, MERGE_NAME),
+                null, false, thisKeySerde, thisValueSerde, otherKeySerde, joinedValueSerde);
     }
 
-    @SuppressWarnings("unchecked")
-    private <V0, KL, VL, KR, VR> KTable<KL, V0> doJoinOnForeignKey(final KTable<KR, VR> other,
-                                                                   final ValueMapper<VL, KR> keyExtractor,
-                                                                   final ValueJoiner<VL, VR, V0> joiner,
-                                                                   final MaterializedInternal<KL, V0, KeyValueStore<Bytes, byte[]>> materialized,
-                                                                   final StreamPartitioner<KR,?> foreignKeyPartitioner,
-                                                                   final boolean leftOuter,
-                                                                   final Serde<KL> thisKeySerde,
-                                                                   final Serde<VL> thisValueSerde,
-                                                                   final Serde<KR> otherKeySerde,
-                                                                   final Serde<V0> joinedValueSerde) {
-        Objects.requireNonNull(other, "other can't be null");
-        Objects.requireNonNull(keyExtractor, "keyExtractor can't be null");
-        Objects.requireNonNull(joiner, "joiner can't be null");
-        Objects.requireNonNull(materialized, "materialized can't be null");
+    public <V0, KL, VL, KR, VR> KTable<KL, V0> leftJoinOnForeignKey(final KTable<KR, VR> other,
+                                                                final ValueMapper<VL, KR> keyExtractor,
+                                                                final ValueJoiner<VL, VR, V0> joiner,
+                                                                final Materialized<KL, V0, KeyValueStore<Bytes, byte[]>> materialized,
+                                                                final StreamPartitioner<KR,?> foreignKeyPartitioner,
+                                                                final Serde<KL> thisKeySerde,
+                                                                final Serde<VL> thisValueSerde,
+                                                                final Serde<KR> otherKeySerde,
+                                                                final Serde<V0> joinedValueSerde) {
 
-        final KTable<KL, V0> result = buildJoinOnForeignKey(other,
-                keyExtractor,
-                joiner,
-                materialized,
-                foreignKeyPartitioner,
-                leftOuter,
-                thisKeySerde,
-                thisValueSerde,
-                otherKeySerde,
-                joinedValueSerde);
+        return buildJoinOnForeignKey(other, keyExtractor, joiner, new MaterializedInternal<>(materialized, builder, MERGE_NAME),
+                foreignKeyPartitioner, true, thisKeySerde, thisValueSerde, otherKeySerde, joinedValueSerde);
+    }
 
-        return result;
+    public <V0, KL, VL, KR, VR> KTable<KL, V0> leftJoinOnForeignKey(final KTable<KR, VR> other,
+                                                                final ValueMapper<VL, KR> keyExtractor,
+                                                                final ValueJoiner<VL, VR, V0> joiner,
+                                                                final Materialized<KL, V0, KeyValueStore<Bytes, byte[]>> materialized,
+                                                                final Serde<KL> thisKeySerde,
+                                                                final Serde<VL> thisValueSerde,
+                                                                final Serde<KR> otherKeySerde,
+                                                                final Serde<V0> joinedValueSerde) {
+
+        return buildJoinOnForeignKey(other, keyExtractor, joiner, new MaterializedInternal<>(materialized, builder, MERGE_NAME),
+                null, true, thisKeySerde, thisValueSerde, otherKeySerde, joinedValueSerde);
     }
 
     //Left side (this) contains the one element, right side (other) contains the many elements.
@@ -934,6 +929,11 @@ public class KTableImpl<K, S, V> extends AbstractStream<K> implements KTable<K, 
                                                                       final Serde<VL> thisValueSerde,
                                                                       final Serde<KR> otherKeySerde,
                                                                       final Serde<V0> joinedValueSerde) {
+        Objects.requireNonNull(other, "other can't be null");
+        Objects.requireNonNull(keyExtractor, "keyExtractor can't be null");
+        Objects.requireNonNull(joiner, "joiner can't be null");
+        Objects.requireNonNull(materialized, "materialized can't be null");
+
         ((KTableImpl<?, ?, ?>) other).enableSendingOldValues();
         enableSendingOldValues();
 
