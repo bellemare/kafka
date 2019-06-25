@@ -132,20 +132,27 @@ public class KTableKTableForeignKeyLeftOuterJoinIntegrationTest {
     }
 
     @Test
-    public void shouldInnerInnerJoinQueryable() throws InterruptedException {
+    public void shouldLeftJoinQueryable() throws InterruptedException {
         List<KeyValue<String, String>> expected = new ArrayList<>();
         expected.add(new KeyValue<>("a", "value1=1,A1,value2=E8"));
         expected.add(new KeyValue<>("b", "value1=1,B1,value2=E8"));
-        expected.add(new KeyValue<>("c", "value1=3,C1,value2=null"));
+        KeyValue changeableElement = new KeyValue<>("c", "value1=3,C1,value2=null");
+        expected.add(changeableElement);
         KeyValue deletableElement = new KeyValue<>("d", "value1=4,D1,value2=E10");
         expected.add(deletableElement);
         String queryableName = "someName";
         verifyKTableKTableJoin(expected, queryableName, true);
 
         final List<KeyValue<String, String>> table2 = Arrays.asList(
-                new KeyValue<>("4", (String)null)
+                new KeyValue<>("4", (String)null),
+                new KeyValue<>("3", "E100")
         );
+
+//        final List<KeyValue<String, String>> table2 = Arrays.asList(
+//
+//        );
         try {
+            //IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_1, table1, producerConfig, MOCK_TIME);
             IntegrationTestUtils.produceKeyValuesSynchronously(TABLE_2, table2, producerConfig, MOCK_TIME);
         } catch (ExecutionException e){
             System.out.println("Failing due to exception " + e.getMessage());
@@ -154,9 +161,12 @@ public class KTableKTableForeignKeyLeftOuterJoinIntegrationTest {
         //Hacky way to allow kafka to propagate the deletion. Would normally rewrite the test to be a bit better
         //but hey, someone after me needs to have something to fix right?
         Thread.sleep(8000);
+        expected.remove(changeableElement);
         expected.remove(deletableElement);
-        KeyValue leftJoinedElement = new KeyValue<>("d", "value1=4,D1,value2=null");
+        KeyValue leftJoinedElement = new KeyValue<>("c", "value1=3,C1,value2=E100");
+        KeyValue leftJoinedNullElement = new KeyValue<>("d", "value1=4,D1,value2=null");
         expected.add(leftJoinedElement);
+        expected.add(leftJoinedNullElement);
         verifyKTableKTableJoinQueryableState(expected, queryableName);
     }
 
