@@ -19,7 +19,6 @@ package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.metrics.Sensor;
-import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetterSupplier;
 import org.apache.kafka.streams.kstream.internals.KTableValueGetter;
 import org.apache.kafka.streams.kstream.internals.KTableValueGetterSupplier;
 import org.apache.kafka.streams.processor.AbstractProcessor;
@@ -34,12 +33,8 @@ import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper.Instruction.PROPAGATE_ONLY_IF_FK_VAL_AVAILABLE;
-import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper.Instruction.PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE;
-import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper.Instruction.DELETE_KEY_AND_PROPAGATE;
-
 public class ForeignKeySingleLookupProcessorSupplier<K, KO, VO>
-        implements ProcessorSupplier<KO, SubscriptionWrapper<K>> {
+    implements ProcessorSupplier<KO, SubscriptionWrapper<K>> {
     private static final Logger LOG = LoggerFactory.getLogger(ForeignKeySingleLookupProcessorSupplier.class);
 
     private final String stateStoreName;
@@ -56,27 +51,28 @@ public class ForeignKeySingleLookupProcessorSupplier<K, KO, VO>
 
         return new AbstractProcessor<KO, SubscriptionWrapper<K>>() {
 
-            private TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper> store;
+            private TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>> store;
             private KTableValueGetter<KO, VO> foreignValues;
             private StreamsMetricsImpl metrics;
             private Sensor skippedRecordsSensor;
 
-            @Override@SuppressWarnings("unchecked")
+            @Override
+            @SuppressWarnings("unchecked")
             public void init(final ProcessorContext context) {
                 super.init(context);
                 metrics = (StreamsMetricsImpl) context.metrics();
                 skippedRecordsSensor = ThreadMetrics.skipRecordSensor(metrics);
                 foreignValues = foreignValueGetterSupplier.get();
                 foreignValues.init(context);
-                store = (TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper>) context.getStateStore(stateStoreName);
+                store = (TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>) context.getStateStore(stateStoreName);
             }
 
             @Override
             public void process(final KO key, final SubscriptionWrapper<K> value) {
                 if (key == null) {
                     LOG.warn(
-                            "Skipping record due to null foreign key. value=[{}] topic=[{}] partition=[{}] offset=[{}]",
-                            value, context().topic(), context().partition(), context().offset()
+                        "Skipping record due to null foreign key. value=[{}] topic=[{}] partition=[{}] offset=[{}]",
+                        value, context().topic(), context().partition(), context().offset()
                     );
                     skippedRecordsSensor.record();
                     return;
@@ -88,7 +84,7 @@ public class ForeignKeySingleLookupProcessorSupplier<K, KO, VO>
                     throw new UnsupportedVersionException("SubscriptionWrapper is of an incompatible version.");
                 }
 
-                final CombinedKey<KO, K> combinedKey = new CombinedKey<KO, K>(key, value.getPrimaryKey());
+                final CombinedKey<KO, K> combinedKey = new CombinedKey<>(key, value.getPrimaryKey());
 
                 //If the subscriptionWrapper hash indicates a null, must delete from statestore.
                 //This store is used by the prefix scanner in KTableKTablePrefixScanProcessorSupplier
@@ -99,31 +95,42 @@ public class ForeignKeySingleLookupProcessorSupplier<K, KO, VO>
                 }
 
                 final ValueAndTimestamp<VO> foreignValueAndTime = foreignValues.get(key);
+                final long resultTimestamp =
+                    foreignValueAndTime == null ?
+                        context().timestamp() :
+                        Math.max(context().timestamp(), foreignValueAndTime.timestamp());
 
-                //Do nothing with DELETE_KEY_NO_PROPAGATE, so it's not checked in the instruction list below.
-                if (value.getInstruction() == DELETE_KEY_AND_PROPAGATE) {
-                    final SubscriptionResponseWrapper<VO> newValue = new SubscriptionResponseWrapper<>(value.getHash(), null);
-                    context().forward(combinedKey.getPrimaryKey(), newValue, To.all().withTimestamp(context().timestamp()));
-                } else if (value.getInstruction() == PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE) {
-                    VO valueToSend = null;
-                    //This one needs to go through regardless of LEFT or INNER join, since the extracted FK was
-                    //changed and there is no match for it. We must propagate the (key, null) to ensure that the
-                    //downstream consumers are alerted to this fact.
-                    if (foreignValueAndTime != null) {
-                        //Get the value if it's available, as per instruction.
-                        valueToSend = foreignValueAndTime.value();
+                switch (value.getInstruction()) {
+                    case DELETE_KEY_AND_PROPAGATE: {
+                        final SubscriptionResponseWrapper<VO> newValue = new SubscriptionResponseWrapper<>(value.getHash(), null);
+                        context().forward(combinedKey.getPrimaryKey(), newValue, To.all().withTimestamp(resultTimestamp));
+                        break;
                     }
-                    final SubscriptionResponseWrapper<VO> newValue = new SubscriptionResponseWrapper<>(value.getHash(), valueToSend);
-                    context().forward(combinedKey.getPrimaryKey(), newValue, To.all().withTimestamp(context().timestamp()));
-                } else if (value.getInstruction() == PROPAGATE_ONLY_IF_FK_VAL_AVAILABLE && foreignValueAndTime != null) {
-                    final SubscriptionResponseWrapper<VO> newValue = new SubscriptionResponseWrapper<>(value.getHash(), foreignValueAndTime.value());
-                    context().forward(combinedKey.getPrimaryKey(), newValue, To.all().withTimestamp(context().timestamp()));
+                    case PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE: {
+                        VO valueToSend = null;
+                        //This one needs to go through regardless of LEFT or INNER join, since the extracted FK was
+                        //changed and there is no match for it. We must propagate the (key, null) to ensure that the
+                        //downstream consumers are alerted to this fact.
+                        if (foreignValueAndTime != null) {
+                            //Get the value if it's available, as per instruction.
+                            valueToSend = foreignValueAndTime.value();
+                        }
+                        final SubscriptionResponseWrapper<VO> newValue = new SubscriptionResponseWrapper<>(value.getHash(), valueToSend);
+                        context().forward(combinedKey.getPrimaryKey(), newValue, To.all().withTimestamp(resultTimestamp));
+                        break;
+                    }
+                    case PROPAGATE_ONLY_IF_FK_VAL_AVAILABLE:
+                        if (foreignValueAndTime != null) {
+                            final SubscriptionResponseWrapper<VO> newValue = new SubscriptionResponseWrapper<>(value.getHash(), foreignValueAndTime.value());
+                            context().forward(combinedKey.getPrimaryKey(), newValue, To.all().withTimestamp(resultTimestamp));
+                        }
+                        break;
+                    case DELETE_KEY_NO_PROPAGATE:
+                        break;
+                    default:
+                        throw new IllegalStateException("Unhandled instruction: " + value.getInstruction());
                 }
             }
         };
-    }
-
-    public KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, SubscriptionWrapper> valueGetterSupplier() {
-        return new KTablePrefixValueGetterSupplier<>(stateStoreName);
     }
 }

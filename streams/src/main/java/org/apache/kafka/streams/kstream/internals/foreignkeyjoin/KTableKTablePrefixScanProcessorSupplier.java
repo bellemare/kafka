@@ -21,8 +21,6 @@ import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.errors.StreamsException;
 import org.apache.kafka.streams.kstream.internals.Change;
-import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetter;
-import org.apache.kafka.streams.kstream.internals.KTablePrefixValueGetterSupplier;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
@@ -30,40 +28,35 @@ import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.internals.metrics.StreamsMetricsImpl;
 import org.apache.kafka.streams.processor.internals.metrics.ThreadMetrics;
 import org.apache.kafka.streams.state.KeyValueIterator;
+import org.apache.kafka.streams.state.TimestampedKeyValueStore;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class KTableKTablePrefixScanProcessorSupplier<K, KO, VO> implements ProcessorSupplier<KO, Change<VO>> {
-    private final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, SubscriptionWrapper> primary;
     private static final Logger LOG = LoggerFactory.getLogger(KTableKTablePrefixScanProcessorSupplier.class);
+    private final String stateStoreName;
 
-    public KTableKTablePrefixScanProcessorSupplier(final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, SubscriptionWrapper> primary) {
-        this.primary = primary;
+    public KTableKTablePrefixScanProcessorSupplier(final String stateStoreName) {
+        this.stateStoreName = stateStoreName;
     }
 
     @Override
     public Processor<KO, Change<VO>> get() {
-        return new KTableKTableJoinProcessor(primary);
+        return new KTableKTableJoinProcessor();
     }
 
 
-    private class KTableKTableJoinProcessor extends AbstractProcessor<KO, Change<VO>> {
-        private StreamsMetricsImpl metrics;
+    private final class KTableKTableJoinProcessor extends AbstractProcessor<KO, Change<VO>> {
         private Sensor skippedRecordsSensor;
-        private final KTablePrefixValueGetter<CombinedKey<KO, K>, SubscriptionWrapper> prefixValueGetter;
-
-        public KTableKTableJoinProcessor(final KTablePrefixValueGetterSupplier<CombinedKey<KO, K>, SubscriptionWrapper> valueGetter) {
-            prefixValueGetter = valueGetter.get();
-        }
+        private TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>> store;
 
         @SuppressWarnings("unchecked")
         @Override
         public void init(final ProcessorContext context) {
             super.init(context);
-            metrics = (StreamsMetricsImpl) context.metrics();
-            skippedRecordsSensor = ThreadMetrics.skipRecordSensor(metrics);
-            prefixValueGetter.init(context);
+            skippedRecordsSensor = ThreadMetrics.skipRecordSensor((StreamsMetricsImpl) context.metrics());
+            store = (TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>) context.getStateStore(stateStoreName);
         }
 
         /**
@@ -87,14 +80,11 @@ public class KTableKTablePrefixScanProcessorSupplier<K, KO, VO> implements Proce
             final CombinedKey<KO, K> prefixKey = new CombinedKey<>(key);
 
             //Perform the prefixScan and propagate the results
-            final KeyValueIterator<CombinedKey<KO, K>, ValueAndTimestamp<SubscriptionWrapper>> prefixScanResults = prefixValueGetter.prefixScan(prefixKey);
-            try {
+            try (final KeyValueIterator<CombinedKey<KO, K>, ValueAndTimestamp<SubscriptionWrapper<K>>> prefixScanResults = store.prefixScan(prefixKey)) {
                 while (prefixScanResults.hasNext()) {
-                    final KeyValue<CombinedKey<KO, K>, ValueAndTimestamp<SubscriptionWrapper>> scanResult = prefixScanResults.next();
+                    final KeyValue<CombinedKey<KO, K>, ValueAndTimestamp<SubscriptionWrapper<K>>> scanResult = prefixScanResults.next();
                     context().forward(scanResult.key.getPrimaryKey(), new SubscriptionResponseWrapper<>(scanResult.value.value().getHash(), value.newValue));
                 }
-            } finally {
-                prefixScanResults.close();
             }
         }
     }
