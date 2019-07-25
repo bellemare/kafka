@@ -789,7 +789,7 @@ public class KStreamImpl<K, V> extends AbstractStream<K, V> implements KStream<K
                                                  final Serde<V> valueSerdeOverride) {
         final Serde<K> repartitionKeySerde = keySerdeOverride != null ? keySerdeOverride : keySerde;
         final Serde<V> repartitionValueSerde = valueSerdeOverride != null ? valueSerdeOverride : valSerde;
-        final OptimizableRepartitionNodeBuilder<K, V> optimizableRepartitionNodeBuilder =
+        final OptimizableRepartitionNodeBuilder<K, V, K, V> optimizableRepartitionNodeBuilder =
             OptimizableRepartitionNode.optimizableRepartitionNodeBuilder();
         final String repartitionedSourceName = createRepartitionedSource(builder,
                                                                          repartitionKeySerde,
@@ -797,7 +797,7 @@ public class KStreamImpl<K, V> extends AbstractStream<K, V> implements KStream<K
                                                                          repartitionName,
                                                                          optimizableRepartitionNodeBuilder);
 
-        final OptimizableRepartitionNode<K, V> optimizableRepartitionNode = optimizableRepartitionNodeBuilder.build();
+        final OptimizableRepartitionNode<K, V, K, V> optimizableRepartitionNode = optimizableRepartitionNodeBuilder.build();
         builder.addGraphNode(this.streamsGraphNode, optimizableRepartitionNode);
 
         return new KStreamImpl<>(repartitionedSourceName, repartitionKeySerde, repartitionValueSerde, Collections.singleton(repartitionedSourceName), false, optimizableRepartitionNode, builder);
@@ -807,7 +807,7 @@ public class KStreamImpl<K, V> extends AbstractStream<K, V> implements KStream<K
                                                      final Serde<K1> keySerde,
                                                      final Serde<V1> valSerde,
                                                      final String repartitionTopicNamePrefix,
-                                                     final OptimizableRepartitionNodeBuilder<K1, V1> optimizableRepartitionNodeBuilder) {
+                                                     final OptimizableRepartitionNodeBuilder<K1, V1, K1, V1> optimizableRepartitionNodeBuilder) {
 
 
         final String repartitionTopic = repartitionTopicNamePrefix + REPARTITION_TOPIC_SUFFIX;
