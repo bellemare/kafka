@@ -29,6 +29,8 @@ import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
 
+import java.util.Arrays;
+
 public class SubscriptionResolverJoinProcessorSupplier<K, V, VO, VR> implements ProcessorSupplier<K, SubscriptionResponseWrapper<VO>> {
     private final KTableValueGetterSupplier<K, V> valueGetterSupplier;
     private final Serializer<V> valueSerializer;
@@ -76,22 +78,25 @@ public class SubscriptionResolverJoinProcessorSupplier<K, V, VO, VR> implements 
                 //registered schema.
                 final String dummySerializationTopic = context().topic() + "-join-resolver";
                 final long[] currentHash = currentValueWithTimestamp == null ?
-                        null :
-                        Murmur3.hash128(valueSerializer.serialize(dummySerializationTopic, currentValueWithTimestamp.value()));
+                    null :
+                    Murmur3.hash128(valueSerializer.serialize(dummySerializationTopic, currentValueWithTimestamp.value()));
 
                 final long[] messageHash = value.getOriginalValueHash();
 
                 //If this value doesn't match the current value from the original table, it is stale and should be discarded.
                 if (java.util.Arrays.equals(messageHash, currentHash)) {
+                    System.out.println(context().taskId() + "matched " + Arrays.toString(messageHash) + " and " + Arrays.toString(currentHash));
                     final VR result;
 
                     if (value.getForeignValue() == null && !leftJoin ||
-                            leftJoin && currentValueWithTimestamp == null && value.getForeignValue() == null) {
+                        leftJoin && currentValueWithTimestamp == null && value.getForeignValue() == null) {
                         result = null; //Emit tombstone
                     } else {
                         result = joiner.apply(currentValueWithTimestamp == null ? null : currentValueWithTimestamp.value(), value.getForeignValue());
                     }
                     context().forward(key, result);
+                } else {
+                    System.out.println(context().taskId() + "didn't match " + Arrays.toString(messageHash) + " and " + Arrays.toString(currentHash));
                 }
             }
         };

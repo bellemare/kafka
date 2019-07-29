@@ -18,6 +18,7 @@ package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 
@@ -95,6 +96,16 @@ public class SubscriptionWrapper<K> {
 
     public byte getVersion() {
         return version;
+    }
+
+    @Override
+    public String toString() {
+        return "SubscriptionWrapper{" +
+            "version=" + version +
+            ", primaryKey=" + primaryKey +
+            ", instruction=" + instruction +
+            ", hash=" + Arrays.toString(hash) +
+            '}';
     }
 }
 

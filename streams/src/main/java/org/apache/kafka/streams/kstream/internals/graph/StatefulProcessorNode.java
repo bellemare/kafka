@@ -18,17 +18,34 @@
 package org.apache.kafka.streams.kstream.internals.graph;
 
 
+import org.apache.kafka.streams.kstream.internals.KTableValueGetterSupplier;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
 import org.apache.kafka.streams.state.StoreBuilder;
 
 import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class StatefulProcessorNode<K, V> extends ProcessorGraphNode<K, V> {
 
     private final String[] storeNames;
     private final StoreBuilder<? extends StateStore> storeBuilder;
+
+    /**
+     * Create a node representing a stateful processor, where the named stores have already been registered.
+     */
+    public StatefulProcessorNode(final ProcessorParameters<K, V> processorParameters,
+                                 final Set<StoreBuilder<? extends StateStore>> preRegisteredStores,
+                                 final Set<KTableValueGetterSupplier<?, ?>> valueGetterSuppliers) {
+        super(processorParameters.processorName(), processorParameters);
+        final Stream<String> registeredStoreNames = preRegisteredStores.stream().map(StoreBuilder::name);
+        final Stream<String> valueGetterStoreNames = valueGetterSuppliers.stream().flatMap(s -> Arrays.stream(s.storeNames()));
+        this.storeNames = Stream.concat(registeredStoreNames, valueGetterStoreNames).toArray(String[]::new);
+        this.storeBuilder = null;
+    }
 
     /**
      * Create a node representing a stateful processor, where the named stores have already been registered,

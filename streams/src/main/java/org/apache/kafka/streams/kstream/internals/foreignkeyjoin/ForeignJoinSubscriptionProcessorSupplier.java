@@ -25,20 +25,23 @@ import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
-import org.apache.kafka.streams.processor.internals.metrics.StreamsMetricsImpl;
+import org.apache.kafka.streams.processor.internals.InternalProcessorContext;
 import org.apache.kafka.streams.processor.internals.metrics.ThreadMetrics;
 import org.apache.kafka.streams.state.KeyValueIterator;
+import org.apache.kafka.streams.state.StoreBuilder;
 import org.apache.kafka.streams.state.TimestampedKeyValueStore;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class KTableKTablePrefixScanProcessorSupplier<K, KO, VO> implements ProcessorSupplier<KO, Change<VO>> {
-    private static final Logger LOG = LoggerFactory.getLogger(KTableKTablePrefixScanProcessorSupplier.class);
-    private final String stateStoreName;
+public class ForeignJoinSubscriptionProcessorSupplier<K, KO, VO> implements ProcessorSupplier<KO, Change<VO>> {
+    private static final Logger LOG = LoggerFactory.getLogger(ForeignJoinSubscriptionProcessorSupplier.class);
+    private final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> storeBuilder;
 
-    public KTableKTablePrefixScanProcessorSupplier(final String stateStoreName) {
-        this.stateStoreName = stateStoreName;
+    public ForeignJoinSubscriptionProcessorSupplier(
+        final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> storeBuilder) {
+
+        this.storeBuilder = storeBuilder;
     }
 
     @Override
@@ -51,12 +54,12 @@ public class KTableKTablePrefixScanProcessorSupplier<K, KO, VO> implements Proce
         private Sensor skippedRecordsSensor;
         private TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>> store;
 
-        @SuppressWarnings("unchecked")
         @Override
         public void init(final ProcessorContext context) {
             super.init(context);
-            skippedRecordsSensor = ThreadMetrics.skipRecordSensor((StreamsMetricsImpl) context.metrics());
-            store = (TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>) context.getStateStore(stateStoreName);
+            final InternalProcessorContext internalProcessorContext = ((InternalProcessorContext) context);
+            skippedRecordsSensor = ThreadMetrics.skipRecordSensor(internalProcessorContext.metrics());
+            store = internalProcessorContext.getStateStore(storeBuilder);
         }
 
         /**

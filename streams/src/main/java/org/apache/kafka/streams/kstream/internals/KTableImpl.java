@@ -19,7 +19,7 @@ package org.apache.kafka.streams.kstream.internals;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.errors.StreamsException;
+import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Grouped;
 import org.apache.kafka.streams.kstream.KGroupedTable;
 import org.apache.kafka.streams.kstream.KStream;
@@ -28,6 +28,7 @@ import org.apache.kafka.streams.kstream.KeyValueMapper;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Named;
 import org.apache.kafka.streams.kstream.Predicate;
+import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.kstream.Suppressed;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 import org.apache.kafka.streams.kstream.ValueMapper;
@@ -35,12 +36,13 @@ import org.apache.kafka.streams.kstream.ValueMapperWithKey;
 import org.apache.kafka.streams.kstream.ValueTransformerWithKeySupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKey;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKeySerde;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.ForeignKeySingleLookupProcessorSupplier;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableKTablePrefixScanProcessorSupplier;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.ForeignJoinSubscriptionProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.KTableRepartitionerProcessorSupplier;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionJoinForeignProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResolverJoinProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapper;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperSerde;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionStoreReceiveProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerde;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableJoinNode;
@@ -48,24 +50,26 @@ import org.apache.kafka.streams.kstream.internals.graph.OptimizableRepartitionNo
 import org.apache.kafka.streams.kstream.internals.graph.ProcessorGraphNode;
 import org.apache.kafka.streams.kstream.internals.graph.ProcessorParameters;
 import org.apache.kafka.streams.kstream.internals.graph.StatefulProcessorNode;
+import org.apache.kafka.streams.kstream.internals.graph.StreamSinkNode;
+import org.apache.kafka.streams.kstream.internals.graph.StreamSourceNode;
 import org.apache.kafka.streams.kstream.internals.graph.StreamsGraphNode;
-import org.apache.kafka.streams.kstream.internals.graph.SubscriptionResponseRepartitionNode;
 import org.apache.kafka.streams.kstream.internals.graph.TableProcessorNode;
 import org.apache.kafka.streams.kstream.internals.suppress.FinalResultsSuppressionBuilder;
 import org.apache.kafka.streams.kstream.internals.suppress.KTableSuppressProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.suppress.NamedSuppressed;
 import org.apache.kafka.streams.kstream.internals.suppress.SuppressedInternal;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
+import org.apache.kafka.streams.processor.internals.StaticTopicNameExtractor;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.StoreBuilder;
 import org.apache.kafka.streams.state.Stores;
 import org.apache.kafka.streams.state.TimestampedKeyValueStore;
+import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.apache.kafka.streams.state.internals.InMemoryTimeOrderedKeyValueBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
@@ -891,12 +895,15 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         enableSendingOldValues();
 
         final Serde<KO> foreignKeySerde = ((KTableImpl<KO, VO, ?>) foreignKeyTable).keySerde;
+        final Serde<SubscriptionWrapper<K>> subscriptionWrapperSerde = new SubscriptionWrapperSerde<>(keySerde);
+        final Serde<CombinedKey<KO, K>> combinedKeySerde = new CombinedKeySerde<>(foreignKeySerde, this.keySerde);
+        final SubscriptionResponseWrapperSerde<VO> responseWrapperSerde = new SubscriptionResponseWrapperSerde<>(((KTableImpl<KO, VO, VO>) foreignKeyTable).valSerde);
 
 
         final NamedInternal renamed = new NamedInternal(joinName);
 
         //Must make a repartitioner processor, and an associated topic with a sink and source processor.
-        final OptimizableRepartitionNode<K, Change<V>, KO, SubscriptionWrapper<K>> repartitionNode;
+        final OptimizableRepartitionNode<K, Change<V>, KO, SubscriptionWrapper<K>> sendSubscriptionsToForeignTableNode;
         {
             final String repartitionProcessorName = renamed.suffixWithOrElseGet("-subscription-registration-processor", builder, SUBSCRIPTION_REGISTRATION);
             final String repartitionSinkName = renamed.suffixWithOrElseGet("-subscription-registration-sink", builder, SINK_NAME);
@@ -911,7 +918,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
             builder.internalTopologyBuilder.copartitionSources(copartitionedRepartitionSources);
 
             //Create a processor that generates and sends subscription requests (SubscriptionWrapper) to the
-            //ForeignKeySingleLookupProcessorSupplier.
+            //foreign side of the join.
             final KTableRepartitionerProcessorSupplier<K, KO, V> repartitionProcessor =
                 new KTableRepartitionerProcessorSupplier<>(foreignKeyExtractor,
                                                            foreignKeySerde,
@@ -919,9 +926,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                                                            valSerde.serializer(),
                                                            leftJoin);
 
-            final Serde<SubscriptionWrapper<K>> wrapperSerde = new SubscriptionWrapperSerde<>(keySerde);
-
-            repartitionNode =
+            sendSubscriptionsToForeignTableNode =
                 new OptimizableRepartitionNode<>(
                     repartitionSourceName,
                     repartitionSourceName,
@@ -930,144 +935,121 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                         repartitionProcessorName
                     ),
                     foreignKeySerde,
-                    wrapperSerde,
+                    subscriptionWrapperSerde,
                     repartitionSinkName,
                     repartitionTopicName
                 );
+            builder.addGraphNode(streamsGraphNode, sendSubscriptionsToForeignTableNode);
         }
-        builder.addGraphNode(streamsGraphNode, repartitionNode);
 
-        //Receives events from the KTableRepartitionerProcessorSupplier and handles them according
-        //to the embedded instructions within the SubscriptionWrapper.
-        //An internal materialized RocksDB statestore maintains the current active subscriptions, and will update the
-        //state according to the incoming SubscriptionWrapper instructions.
-        //
-        //SubscriptionResponseWrappers are issued depending on the results of the SubscriptionWrapper processing
-        //and the presence of the matching keyed event in the foreignKeyTable KTable.
-        final String subscriptionStateStoreName = renamed.suffixWithOrElseGet("-subscription-state-store", builder, FK_JOIN_STATE_STORE_NAME);
 
-        final String subscriptionHandlerName = renamed.suffixWithOrElseGet("-subscription-processor", builder, SUBSCRIPTION_PROCESSOR);
-        final String prefixScanProcessorSupplierName = renamed.suffixWithOrElseGet("-prefix-scan-processor", builder, PREFIX_SCAN_PROCESSOR);
-
-        final Serde<CombinedKey<KO, K>> keySerde = new CombinedKeySerde<>(foreignKeySerde, this.keySerde);
-        final Serde<SubscriptionWrapper<K>> valueSerde = new SubscriptionWrapperSerde<>(this.keySerde);
-
-        final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> prefixScanStoreBuilder =
+        final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> subscriptionStore =
             Stores.timestampedKeyValueStoreBuilder(
-                Stores.persistentTimestampedKeyValueStore(subscriptionStateStoreName),
-                keySerde,
-                valueSerde
+                Stores.persistentTimestampedKeyValueStore(
+                    renamed.suffixWithOrElseGet("-subscription-store", builder, FK_JOIN_STATE_STORE_NAME)
+                ),
+                combinedKeySerde,
+                subscriptionWrapperSerde
             );
+        builder.addStateStore(subscriptionStore);
 
+        final StatefulProcessorNode<KO, SubscriptionWrapper<K>> subscriptionReceiveNode =
+            new StatefulProcessorNode<>(
+                new ProcessorParameters<>(
+                    new SubscriptionStoreReceiveProcessorSupplier<>(subscriptionStore),
+                    renamed.suffixWithOrElseGet("-subscription-receive", builder, SUBSCRIPTION_PROCESSOR)
+                ),
+                Collections.singleton(subscriptionStore),
+                Collections.emptySet()
+            );
+        builder.addGraphNode(sendSubscriptionsToForeignTableNode, subscriptionReceiveNode);
 
-        final StatefulProcessorNode<CombinedKey<KO, K>, V> oneToOneNode = new StatefulProcessorNode(
-            subscriptionHandlerName,
-            new ProcessorParameters<KO, SubscriptionWrapper<K>>(
-                new ForeignKeySingleLookupProcessorSupplier<>(
-                    subscriptionStateStoreName,
+        final StatefulProcessorNode<CombinedKey<KO, K>, Change<ValueAndTimestamp<SubscriptionWrapper<K>>>> subscriptionJoinForeignNode =
+            new StatefulProcessorNode<>(
+                new ProcessorParameters<>(
+                new SubscriptionJoinForeignProcessorSupplier<>(
+                    subscriptionStore,
                     ((KTableImpl<KO, VO, VO>) foreignKeyTable).valueGetterSupplier()
                 ),
-                subscriptionHandlerName
+                renamed.suffixWithOrElseGet("-subscription-join-foreign", builder, SUBSCRIPTION_PROCESSOR)
             ),
-            ((KTableImpl<KO, VO, ?>) foreignKeyTable).valueGetterSupplier().storeNames(),
-            prefixScanStoreBuilder
+            Collections.singleton(subscriptionStore),
+            Collections.singleton(((KTableImpl<KO, VO, VO>) foreignKeyTable).valueGetterSupplier())
         );
-        builder.addGraphNode(repartitionNode, oneToOneNode);
+        builder.addGraphNode(subscriptionReceiveNode, subscriptionJoinForeignNode);
 
-
-
-        //foreignKeyTable-driven event processing.
-        //Performs a prefixScan on the subscriptionStateStoreName and emits a SubscriptionResponseWrapper for each
-        //matching subscribed event. These subsequent events are emitted to a repartition topic named
-        //finalRepartitionTopicName below.
-
-        final StatefulProcessorNode<KO, Change<VO>> oneToManyNode = new StatefulProcessorNode<>(
-            prefixScanProcessorSupplierName,
+        final StatefulProcessorNode<KO, Change<Object>> foreignJoinSubscriptionNode = new StatefulProcessorNode<>(
             new ProcessorParameters<>(
-                new KTableKTablePrefixScanProcessorSupplier<>(subscriptionStateStoreName),
-                prefixScanProcessorSupplierName
+                new ForeignJoinSubscriptionProcessorSupplier<>(subscriptionStore),
+                renamed.suffixWithOrElseGet("-foreign-join-subscription", builder, SUBSCRIPTION_PROCESSOR)
             ),
-            new String[] {prefixScanStoreBuilder.name()}
+            Collections.singleton(subscriptionStore),
+            Collections.emptySet()
         );
-        builder.addGraphNode(((KTableImpl<KO, VO, ?>) foreignKeyTable).streamsGraphNode, oneToManyNode);
+        builder.addGraphNode(((KTableImpl<KO, VO, ?>) foreignKeyTable).streamsGraphNode, foreignJoinSubscriptionNode);
 
 
-        //Rekey all SubscriptionResponseWrapper events back to K from KO, to ensure they end up in the the same partition.
-        final String finalRepartitionerName = renamed.suffixWithOrElseGet("-subscription-response-processor", builder, SUBSCRIPTION_RESPONSE);
-        final String finalRepartitionTopicName = finalRepartitionerName + TOPIC_SUFFIX;
-        final String finalRepartitionSourceName = renamed.suffixWithOrElseGet("-subscription-response-source", builder, SOURCE_NAME);
-        final String finalRepartitionSinkName = renamed.suffixWithOrElseGet("-subscription-response-sink", builder, SINK_NAME);
+        final String finalRepartitionTopicName = renamed.suffixWithOrElseGet("-subscription-response-processor", builder, SUBSCRIPTION_RESPONSE) + TOPIC_SUFFIX;
+        builder.internalTopologyBuilder.addInternalTopic(finalRepartitionTopicName);
 
-        //Create the processor to resolve the subscription updates.
-        final KTableValueGetterSupplier<K, V> thisKTableValueGetterSupplier = this.valueGetterSupplier();
-
-        final String resolverProcessorName = renamed.suffixWithOrElseGet("-subscription-response-resolver-processor", builder, SUBSCRIPTION_RESPONSE_RESOLVER_PROCESSOR);
-
-        final String outputProcessorName = renamed.suffixWithOrElseGet("-output-processor", builder, FK_JOIN_OUTPUT_PROCESSOR);
-
-        final Set<String> copartitions = new HashSet<>(sourceNodes);
-        copartitions.add(finalRepartitionSourceName);
-        builder.internalTopologyBuilder.copartitionSources(copartitions);
-
-        final SubscriptionResponseRepartitionNode<K, V, KO, VO> responseRepartitionNode =
-            new SubscriptionResponseRepartitionNode<>(
-                finalRepartitionSourceName,
-                new ProcessorParameters<>(
-                    new ForeignKeySingleLookupProcessorSupplier<>(
-                        subscriptionStateStoreName,
-                        ((KTableImpl<KO, VO, VO>) foreignKeyTable).valueGetterSupplier()
-                    ),
-                    subscriptionHandlerName
-                ),
-                new ProcessorParameters<>(
-                    new KTableKTablePrefixScanProcessorSupplier<>(subscriptionStateStoreName),
-                    prefixScanProcessorSupplierName
-                ),
-                finalRepartitionTopicName,
-                finalRepartitionSinkName,
-                finalRepartitionSourceName,
-                this.keySerde,
-                new SubscriptionResponseWrapperSerde<>(((KTableImpl<KO, VO, VO>) foreignKeyTable).valSerde)
+        final StreamSinkNode<K, SubscriptionResponseWrapper<VO>> foreignResponseSink =
+            new StreamSinkNode<>(
+                renamed.suffixWithOrElseGet("-subscription-response-sink", builder, SINK_NAME),
+                new StaticTopicNameExtractor<>(finalRepartitionTopicName),
+                new ProducedInternal<>(Produced.with(keySerde, responseWrapperSerde))
             );
-        builder.addGraphNode(oneToOneNode, responseRepartitionNode);
-        builder.addGraphNode(oneToManyNode, responseRepartitionNode);
+        builder.addGraphNode(subscriptionJoinForeignNode, foreignResponseSink);
+        builder.addGraphNode(foreignJoinSubscriptionNode, foreignResponseSink);
 
+        final StreamSourceNode<K, SubscriptionResponseWrapper<VO>> foreignResponseSource = new StreamSourceNode<>(
+            renamed.suffixWithOrElseGet("-subscription-response-source", builder, SOURCE_NAME),
+            Collections.singleton(finalRepartitionTopicName),
+            new ConsumedInternal<>(Consumed.with(keySerde, responseWrapperSerde))
+        );
+        builder.addGraphNode(foreignResponseSink, foreignResponseSource);
+
+        // the response topic has to be copartitioned with the left (primary) side of the join
+        final Set<String> resultSourceNodes = new HashSet<>(this.sourceNodes);
+        resultSourceNodes.add(foreignResponseSource.nodeName());
+        builder.internalTopologyBuilder.copartitionSources(resultSourceNodes);
+
+        final KTableValueGetterSupplier<K, V> primaryKeyValueGetter = valueGetterSupplier();
         final StatefulProcessorNode<K, SubscriptionResponseWrapper<VO>> resolverNode = new StatefulProcessorNode<>(
-            resolverProcessorName,
             new ProcessorParameters<>(
                 new SubscriptionResolverJoinProcessorSupplier<>(
-                    thisKTableValueGetterSupplier,
+                    primaryKeyValueGetter,
                     valueSerde().serializer(),
                     joiner,
                     leftJoin
                 ),
-                resolverProcessorName
+                renamed.suffixWithOrElseGet("-subscription-response-resolver-processor", builder, SUBSCRIPTION_RESPONSE_RESOLVER_PROCESSOR)
             ),
-            valueGetterSupplier().storeNames()
+            Collections.emptySet(),
+            Collections.singleton(primaryKeyValueGetter)
         );
-        builder.addGraphNode(responseRepartitionNode, resolverNode);
+        builder.addGraphNode(foreignResponseSource, resolverNode);
 
-        final StoreBuilder<TimestampedKeyValueStore<K, VR>> storeBuilder =
-            new TimestampedKeyValueStoreMaterializer<>(materializedInternal).materialize();
-
-        final TableProcessorNode<K, VR> outputTableNode = new TableProcessorNode<>(
-            outputProcessorName,
+        final String resultProcessorName = renamed.suffixWithOrElseGet("-result-processor", builder, FK_JOIN_OUTPUT_PROCESSOR);
+        final KTableSource<K, VR> resultProcessor = new KTableSource<>(materializedInternal.storeName(), materializedInternal.queryableStoreName());
+        final TableProcessorNode<K, VR> resultNode = new TableProcessorNode<>(
+            resultProcessorName,
             new ProcessorParameters<>(
-                new KTableSource<>(materializedInternal.storeName(), materializedInternal.queryableStoreName()),
-                outputProcessorName
+                resultProcessor,
+                resultProcessorName
             ),
-            storeBuilder
+            new TimestampedKeyValueStoreMaterializer<>(materializedInternal).materialize()
         );
-        builder.addGraphNode(resolverNode, outputTableNode);
+        builder.addGraphNode(resolverNode, resultNode);
 
         return new KTableImpl<K, V, VR>(
-            outputProcessorName,
-            this.keySerde,
+            resultProcessorName,
+            keySerde,
             materializedInternal.valueSerde(),
-            Collections.singleton(finalRepartitionSourceName),
+            resultSourceNodes,
             materializedInternal.storeName(),
-            new KTableSource<K, VR>(materializedInternal.storeName(), materializedInternal.queryableStoreName()),
-            outputTableNode,
-            builder);
+            resultProcessor,
+            resultNode,
+            builder
+        );
     }
 }
