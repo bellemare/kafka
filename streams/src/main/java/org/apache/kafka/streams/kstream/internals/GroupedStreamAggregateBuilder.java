@@ -82,7 +82,7 @@ class GroupedStreamAggregateBuilder<K, V> {
         StreamsGraphNode parentNode = streamsGraphNode;
 
         if (repartitionRequired) {
-            final OptimizableRepartitionNodeBuilder<K, V, K, V> repartitionNodeBuilder = optimizableRepartitionNodeBuilder();
+            final OptimizableRepartitionNodeBuilder<K, V> repartitionNodeBuilder = optimizableRepartitionNodeBuilder();
             final String repartitionTopicPrefix = userProvidedRepartitionTopicName != null ? userProvidedRepartitionTopicName : storeBuilder.name();
             sourceName = createRepartitionSource(repartitionTopicPrefix, repartitionNodeBuilder);
 
@@ -122,7 +122,7 @@ class GroupedStreamAggregateBuilder<K, V> {
      * @return the new sourceName of the repartitioned source
      */
     private String createRepartitionSource(final String repartitionTopicNamePrefix,
-                                           final OptimizableRepartitionNodeBuilder<K, V, K, V> optimizableRepartitionNodeBuilder) {
+                                           final OptimizableRepartitionNodeBuilder<K, V> optimizableRepartitionNodeBuilder) {
 
         return KStreamImpl.createRepartitionedSource(builder,
                                                      keySerde,

@@ -20,23 +20,26 @@ package org.apache.kafka.streams.kstream.internals.graph;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
+import org.apache.kafka.streams.processor.StreamPartitioner;
 
-public abstract class BaseRepartitionNode<RepartitionKey, RepartitionValue> extends StreamsGraphNode {
+public abstract class BaseRepartitionNode<K, V> extends StreamsGraphNode {
 
-    protected final Serde<RepartitionKey> keySerde;
-    protected final Serde<RepartitionValue> valueSerde;
+    protected final Serde<K> keySerde;
+    protected final Serde<V> valueSerde;
     protected final String sinkName;
     protected final String sourceName;
     protected final String repartitionTopic;
     protected final ProcessorParameters processorParameters;
+    protected final StreamPartitioner<K, V> partitioner;
 
     BaseRepartitionNode(final String nodeName,
                         final String sourceName,
                         final ProcessorParameters processorParameters,
-                        final Serde<RepartitionKey> keySerde,
-                        final Serde<RepartitionValue> valueSerde,
+                        final Serde<K> keySerde,
+                        final Serde<V> valueSerde,
                         final String sinkName,
-                        final String repartitionTopic) {
+                        final String repartitionTopic,
+                        final StreamPartitioner<K, V> partitioner) {
 
         super(nodeName);
 
@@ -46,11 +49,12 @@ public abstract class BaseRepartitionNode<RepartitionKey, RepartitionValue> exte
         this.sourceName = sourceName;
         this.repartitionTopic = repartitionTopic;
         this.processorParameters = processorParameters;
+        this.partitioner = partitioner;
     }
 
-    abstract Serializer<RepartitionValue> getValueSerializer();
+    abstract Serializer<V> getValueSerializer();
 
-    abstract Deserializer<RepartitionValue> getValueDeserializer();
+    abstract Deserializer<V> getValueDeserializer();
 
     @Override
     public String toString() {
@@ -60,7 +64,8 @@ public abstract class BaseRepartitionNode<RepartitionKey, RepartitionValue> exte
                ", sinkName='" + sinkName + '\'' +
                ", sourceName='" + sourceName + '\'' +
                ", repartitionTopic='" + repartitionTopic + '\'' +
-               ", processorParameters=" + processorParameters +
+               ", processorParameters=" + processorParameters + '\'' +
+               ", partitioner=" + partitioner +
                "} " + super.toString();
     }
 }
