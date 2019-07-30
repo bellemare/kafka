@@ -18,6 +18,7 @@
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 import org.apache.kafka.common.metrics.Sensor;
+import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.errors.StreamsException;
 import org.apache.kafka.streams.kstream.internals.Change;
@@ -34,14 +35,19 @@ import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.ByteBuffer;
+
 public class ForeignJoinSubscriptionProcessorSupplier<K, KO, VO> implements ProcessorSupplier<KO, Change<VO>> {
     private static final Logger LOG = LoggerFactory.getLogger(ForeignJoinSubscriptionProcessorSupplier.class);
-    private final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> storeBuilder;
+    private final StoreBuilder<TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>>> storeBuilder;
+    private final CombinedKeySchema<KO, K> keySchema;
 
     public ForeignJoinSubscriptionProcessorSupplier(
-        final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> storeBuilder) {
+        final StoreBuilder<TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>>> storeBuilder,
+        final CombinedKeySchema<KO, K> keySchema) {
 
         this.storeBuilder = storeBuilder;
+        this.keySchema = keySchema;
     }
 
     @Override
@@ -52,7 +58,7 @@ public class ForeignJoinSubscriptionProcessorSupplier<K, KO, VO> implements Proc
 
     private final class KTableKTableJoinProcessor extends AbstractProcessor<KO, Change<VO>> {
         private Sensor skippedRecordsSensor;
-        private TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>> store;
+        private TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>> store;
 
         @Override
         public void init(final ProcessorContext context) {
@@ -71,24 +77,38 @@ public class ForeignJoinSubscriptionProcessorSupplier<K, KO, VO> implements Proc
             // the record with the table
             if (key == null) {
                 LOG.warn(
-                        "Skipping record due to null key. value=[{}] topic=[{}] partition=[{}] offset=[{}]",
-                        value, context().topic(), context().partition(), context().offset()
+                    "Skipping record due to null key. value=[{}] topic=[{}] partition=[{}] offset=[{}]",
+                    value, context().topic(), context().partition(), context().offset()
                 );
                 skippedRecordsSensor.record();
                 return;
             }
 
-            //Make a CombinedKey that contains ONLY the prefix and no PK. When serialized, it will allow the prefixScan
-            //to extract serialized CombinedKeys containing both the PK and FK.
-            final CombinedKey<KO, K> prefixKey = new CombinedKey<>(key);
+            final Bytes prefixBytes = keySchema.prefixBytes(key);
 
             //Perform the prefixScan and propagate the results
-            try (final KeyValueIterator<CombinedKey<KO, K>, ValueAndTimestamp<SubscriptionWrapper<K>>> prefixScanResults = store.prefixScan(prefixKey)) {
+            try (final KeyValueIterator<Bytes, ValueAndTimestamp<SubscriptionWrapper<K>>> prefixScanResults =
+                     store.range(prefixBytes, Bytes.increment(prefixBytes))) {
+
                 while (prefixScanResults.hasNext()) {
-                    final KeyValue<CombinedKey<KO, K>, ValueAndTimestamp<SubscriptionWrapper<K>>> scanResult = prefixScanResults.next();
-                    context().forward(scanResult.key.getPrimaryKey(), new SubscriptionResponseWrapper<>(scanResult.value.value().getHash(), value.newValue));
+                    final KeyValue<Bytes, ValueAndTimestamp<SubscriptionWrapper<K>>> next = prefixScanResults.next();
+                    // have to check the prefix because the range end is inclusive :(
+                    if (prefixEquals(next.key.get(), prefixBytes.get())) {
+                        final CombinedKey<KO, K> combinedKey = keySchema.fromBytes(next.key);
+                        context().forward(
+                            combinedKey.getPrimaryKey(),
+                            new SubscriptionResponseWrapper<>(next.value.value().getHash(), value.newValue)
+                        );
+                    }
                 }
             }
+        }
+
+        private boolean prefixEquals(final byte[] x, final byte[] y) {
+            final int min = Math.min(x.length, y.length);
+            final ByteBuffer xSlice = ByteBuffer.wrap(x, 0, min);
+            final ByteBuffer ySlice = ByteBuffer.wrap(y, 0, min);
+            return xSlice.equals(ySlice);
         }
     }
 }

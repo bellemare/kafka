@@ -19,6 +19,7 @@ package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.metrics.Sensor;
+import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.kstream.internals.Change;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.apache.kafka.streams.processor.Processor;
@@ -38,12 +39,15 @@ public class SubscriptionStoreReceiveProcessorSupplier<K, KO>
     implements ProcessorSupplier<KO, SubscriptionWrapper<K>> {
     private static final Logger LOG = LoggerFactory.getLogger(SubscriptionStoreReceiveProcessorSupplier.class);
 
-    private final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> storeBuilder;
+    private final StoreBuilder<TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>>> storeBuilder;
+    private final CombinedKeySchema<KO, K> keySchema;
 
     public SubscriptionStoreReceiveProcessorSupplier(
-        final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> storeBuilder) {
+        final StoreBuilder<TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>>> storeBuilder,
+        final CombinedKeySchema<KO, K> keySchema) {
 
         this.storeBuilder = storeBuilder;
+        this.keySchema = keySchema;
     }
 
     @Override
@@ -51,7 +55,7 @@ public class SubscriptionStoreReceiveProcessorSupplier<K, KO>
 
         return new AbstractProcessor<KO, SubscriptionWrapper<K>>() {
 
-            private TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>> store;
+            private TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>> store;
             private StreamsMetricsImpl metrics;
             private Sensor skippedRecordsSensor;
 
@@ -82,21 +86,26 @@ public class SubscriptionStoreReceiveProcessorSupplier<K, KO>
                     throw new UnsupportedVersionException("SubscriptionWrapper is of an incompatible version.");
                 }
 
-                final CombinedKey<KO, K> combinedKey = new CombinedKey<>(key, value.getPrimaryKey());
+                final Bytes subscriptionKey = keySchema.toBytes(key, value.getPrimaryKey());
+
                 final ValueAndTimestamp<SubscriptionWrapper<K>> newValue = ValueAndTimestamp.make(value, context().timestamp());
-                final ValueAndTimestamp<SubscriptionWrapper<K>> oldValue = store.get(combinedKey);
+                final ValueAndTimestamp<SubscriptionWrapper<K>> oldValue = store.get(subscriptionKey);
 
                 //If the subscriptionWrapper hash indicates a null, must delete from statestore.
                 //This store is used by the prefix scanner in ForeignJoinSubscriptionProcessorSupplier
                 if (value.getHash() == null) {
-                    store.delete(combinedKey);
+                    store.delete(subscriptionKey);
                 } else {
-                    store.put(combinedKey, newValue);
+                    store.put(subscriptionKey, newValue);
                 }
                 final Change<ValueAndTimestamp<SubscriptionWrapper<K>>> change = new Change<>(newValue, oldValue);
                 // note: key is non-nullable
                 // note: newValue is non-nullable
-                context().forward(combinedKey, change, To.all().withTimestamp(newValue.timestamp()));
+                context().forward(
+                    new CombinedKey<>(key, value.getPrimaryKey()),
+                    change,
+                    To.all().withTimestamp(newValue.timestamp())
+                );
             }
         };
     }

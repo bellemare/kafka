@@ -25,7 +25,7 @@ import java.util.Set;
 class RocksDBPrefixIterator extends RocksDbIterator {
     private byte[] rawPrefix;
 
-    RocksDBPrefixIterator(final String name,
+RocksDBPrefixIterator(final String name,
                           final RocksIterator newIterator,
                           final Set<KeyValueIterator<Bytes, byte[]>> openIterators,
                           final Bytes prefix) {

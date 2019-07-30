@@ -17,6 +17,7 @@
 package org.apache.kafka.streams.kstream.internals;
 
 import org.apache.kafka.common.serialization.Serde;
+import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.kstream.Consumed;
@@ -35,7 +36,7 @@ import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.kstream.ValueMapperWithKey;
 import org.apache.kafka.streams.kstream.ValueTransformerWithKeySupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKey;
-import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKeySerde;
+import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKeySchema;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.ForeignJoinSubscriptionProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.ForeignJoinSubscriptionSendProcessorSupplier;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionJoinForeignProcessorSupplier;
@@ -896,18 +897,19 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
 
         final Serde<KO> foreignKeySerde = ((KTableImpl<KO, VO, ?>) foreignKeyTable).keySerde;
         final Serde<SubscriptionWrapper<K>> subscriptionWrapperSerde = new SubscriptionWrapperSerde<>(keySerde);
-        final Serde<CombinedKey<KO, K>> combinedKeySerde = new CombinedKeySerde<>(foreignKeySerde, keySerde);
-        final SubscriptionResponseWrapperSerde<VO> responseWrapperSerde = new SubscriptionResponseWrapperSerde<>(((KTableImpl<KO, VO, VO>) foreignKeyTable).valSerde);
+        final SubscriptionResponseWrapperSerde<VO> responseWrapperSerde =
+            new SubscriptionResponseWrapperSerde<>(((KTableImpl<KO, VO, VO>) foreignKeyTable).valSerde);
 
 
         final NamedInternal renamed = new NamedInternal(joinName);
+        final String subscriptionTopicName = renamed.suffixWithOrElseGet("-subscription-registration", builder, SUBSCRIPTION_REGISTRATION) + TOPIC_SUFFIX;
+        final CombinedKeySchema<KO, K> combinedKeySchema = new CombinedKeySchema<>(subscriptionTopicName, foreignKeySerde, keySerde);
 
         //Must make a repartitioner processor, and an associated topic with a sink and source processor.
         final OptimizableRepartitionNode<K, Change<V>, KO, SubscriptionWrapper<K>> sendSubscriptionsToForeignTableNode;
         {
             final String repartitionProcessorName = renamed.suffixWithOrElseGet("-subscription-registration-processor", builder, SUBSCRIPTION_REGISTRATION);
             final String repartitionSinkName = renamed.suffixWithOrElseGet("-subscription-registration-sink", builder, SINK_NAME);
-            final String repartitionTopicName = repartitionProcessorName + TOPIC_SUFFIX;
             final String repartitionSourceName = renamed.suffixWithOrElseGet("-subscription-registration-source", builder, SOURCE_NAME);
 
             // The repartition source is the source node on the *receiving* end *after* the repartition.
@@ -922,7 +924,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
             final ForeignJoinSubscriptionSendProcessorSupplier<K, KO, V> repartitionProcessor =
                 new ForeignJoinSubscriptionSendProcessorSupplier<>(foreignKeyExtractor,
                                                                    foreignKeySerde,
-                                                                   repartitionTopicName,
+                                                                   subscriptionTopicName,
                                                                    valSerde.serializer(),
                                                                    leftJoin);
 
@@ -937,18 +939,18 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                     foreignKeySerde,
                     subscriptionWrapperSerde,
                     repartitionSinkName,
-                    repartitionTopicName
+                    subscriptionTopicName
                 );
             builder.addGraphNode(streamsGraphNode, sendSubscriptionsToForeignTableNode);
         }
 
 
-        final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> subscriptionStore =
+        final StoreBuilder<TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>>> subscriptionStore =
             Stores.timestampedKeyValueStoreBuilder(
                 Stores.persistentTimestampedKeyValueStore(
                     renamed.suffixWithOrElseGet("-subscription-store", builder, FK_JOIN_STATE_STORE_NAME)
                 ),
-                combinedKeySerde,
+                new Serdes.BytesSerde(),
                 subscriptionWrapperSerde
             );
         builder.addStateStore(subscriptionStore);
@@ -956,7 +958,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final StatefulProcessorNode<KO, SubscriptionWrapper<K>> subscriptionReceiveNode =
             new StatefulProcessorNode<>(
                 new ProcessorParameters<>(
-                    new SubscriptionStoreReceiveProcessorSupplier<>(subscriptionStore),
+                    new SubscriptionStoreReceiveProcessorSupplier<>(subscriptionStore, combinedKeySchema),
                     renamed.suffixWithOrElseGet("-subscription-receive", builder, SUBSCRIPTION_PROCESSOR)
                 ),
                 Collections.singleton(subscriptionStore),
@@ -972,14 +974,14 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                     ),
                     renamed.suffixWithOrElseGet("-subscription-join-foreign", builder, SUBSCRIPTION_PROCESSOR)
                 ),
-                Collections.singleton(subscriptionStore),
+                Collections.emptySet(),
                 Collections.singleton(((KTableImpl<KO, VO, VO>) foreignKeyTable).valueGetterSupplier())
             );
         builder.addGraphNode(subscriptionReceiveNode, subscriptionJoinForeignNode);
 
         final StatefulProcessorNode<KO, Change<Object>> foreignJoinSubscriptionNode = new StatefulProcessorNode<>(
             new ProcessorParameters<>(
-                new ForeignJoinSubscriptionProcessorSupplier<>(subscriptionStore),
+                new ForeignJoinSubscriptionProcessorSupplier<>(subscriptionStore, combinedKeySchema),
                 renamed.suffixWithOrElseGet("-foreign-join-subscription", builder, SUBSCRIPTION_PROCESSOR)
             ),
             Collections.singleton(subscriptionStore),
