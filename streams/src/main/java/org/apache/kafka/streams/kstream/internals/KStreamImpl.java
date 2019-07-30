@@ -817,7 +817,7 @@ public class KStreamImpl<K, V> extends AbstractStream<K, V> implements KStream<K
 
         final Predicate<K1, V1> notNullKeyPredicate = (k, v) -> k != null;
 
-        final ProcessorParameters<K1, V1> processorParameters = new ProcessorParameters<>(
+        final ProcessorParameters processorParameters = new ProcessorParameters<>(
             new KStreamFilter<>(notNullKeyPredicate, false),
             nullKeyFilterProcessorName
         );
