@@ -22,7 +22,6 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.processor.FailOnInvalidTimestamp;
-import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
 
 public class OptimizableRepartitionNode<K, V, RepartitionKey, RepartitionValue> extends BaseRepartitionNode<RepartitionKey, RepartitionValue> {

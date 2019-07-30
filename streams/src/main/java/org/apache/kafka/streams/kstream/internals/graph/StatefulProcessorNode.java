@@ -26,7 +26,6 @@ import org.apache.kafka.streams.state.StoreBuilder;
 
 import java.util.Arrays;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class StatefulProcessorNode<K, V> extends ProcessorGraphNode<K, V> {
@@ -43,22 +42,8 @@ public class StatefulProcessorNode<K, V> extends ProcessorGraphNode<K, V> {
         super(processorParameters.processorName(), processorParameters);
         final Stream<String> registeredStoreNames = preRegisteredStores.stream().map(StoreBuilder::name);
         final Stream<String> valueGetterStoreNames = valueGetterSuppliers.stream().flatMap(s -> Arrays.stream(s.storeNames()));
-        this.storeNames = Stream.concat(registeredStoreNames, valueGetterStoreNames).toArray(String[]::new);
-        this.storeBuilder = null;
-    }
-
-    /**
-     * Create a node representing a stateful processor, where the named stores have already been registered,
-     * and where the store needs to be built and registered as part of building this node.
-     */
-    public StatefulProcessorNode(final String nodeName,
-                                 final ProcessorParameters<K, V> processorParameters,
-                                 final String[] storeNames,
-                                 final StoreBuilder<? extends StateStore> materializedKTableStoreBuilder) {
-        super(nodeName, processorParameters);
-
-        this.storeNames = storeNames;
-        this.storeBuilder = materializedKTableStoreBuilder;
+        storeNames = Stream.concat(registeredStoreNames, valueGetterStoreNames).toArray(String[]::new);
+        storeBuilder = null;
     }
 
     /**

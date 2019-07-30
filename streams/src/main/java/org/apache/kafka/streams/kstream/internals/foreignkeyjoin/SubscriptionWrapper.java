@@ -23,12 +23,12 @@ import java.util.Objects;
 
 
 public class SubscriptionWrapper<K> {
-    final static byte CURRENT_VERSION = 0;
+    static final byte CURRENT_VERSION = 0;
 
-    final private long[] hash;
-    final private Instruction instruction;
-    final private byte version;
-    final private K primaryKey;
+    private final long[] hash;
+    private final Instruction instruction;
+    private final byte version;
+    private final K primaryKey;
 
     public enum Instruction {
         //Send nothing. Do not propagate.
@@ -46,12 +46,12 @@ public class SubscriptionWrapper<K> {
         //Send (k, fk-val) only if fk-val exists.
         PROPAGATE_ONLY_IF_FK_VAL_AVAILABLE((byte) 0x03);
 
-        private byte value;
+        private final byte value;
         Instruction(final byte value) {
             this.value = value;
         }
 
-        public byte getByte() {
+        public byte getValue() {
             return value;
         }
 

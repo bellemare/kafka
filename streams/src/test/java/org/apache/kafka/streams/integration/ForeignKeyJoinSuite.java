@@ -17,22 +17,9 @@
 package org.apache.kafka.streams.integration;
 
 import org.apache.kafka.common.utils.BytesTest;
-import org.apache.kafka.common.utils.Murmur3Test;
-import org.apache.kafka.streams.kstream.SuppressedTest;
-import org.apache.kafka.streams.kstream.internals.FullChangeSerdeTest;
-import org.apache.kafka.streams.kstream.internals.SuppressScenarioTest;
-import org.apache.kafka.streams.kstream.internals.SuppressTopologyTest;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.CombinedKeySerdeTest;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionResponseWrapperSerdeTest;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerdeTest;
-import org.apache.kafka.streams.kstream.internals.suppress.KTableSuppressProcessorMetricsTest;
-import org.apache.kafka.streams.kstream.internals.suppress.KTableSuppressProcessorTest;
-import org.apache.kafka.streams.state.internals.AbstractByteStoreTest;
-import org.apache.kafka.streams.state.internals.AbstractKeyValueStoreTest;
-import org.apache.kafka.streams.state.internals.BufferValueTest;
-import org.apache.kafka.streams.state.internals.InMemoryTimeOrderedKeyValueBufferTest;
-import org.apache.kafka.streams.state.internals.KeyValueToTimestampedKeyValueByteStoreAdapter;
-import org.apache.kafka.streams.state.internals.TimeOrderedKeyValueBufferTest;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 

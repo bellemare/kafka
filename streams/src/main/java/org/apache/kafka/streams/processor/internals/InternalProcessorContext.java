@@ -69,6 +69,12 @@ public interface InternalProcessorContext extends ProcessorContext {
      */
     void uninitialize();
 
+    /**
+     * Get a correctly typed state store, given a handle on the original builder.
+     * @param builder
+     * @param <T>
+     * @return
+     */
     @SuppressWarnings("unchecked")
     default <T extends StateStore> T getStateStore(final StoreBuilder<T> builder) {
         return (T) getStateStore(builder.name());

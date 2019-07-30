@@ -29,12 +29,12 @@ import org.apache.kafka.streams.processor.ProcessorSupplier;
 
 import java.util.Arrays;
 
-import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper.Instruction.PROPAGATE_ONLY_IF_FK_VAL_AVAILABLE;
-import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper.Instruction.PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE;
 import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper.Instruction.DELETE_KEY_AND_PROPAGATE;
 import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper.Instruction.DELETE_KEY_NO_PROPAGATE;
+import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper.Instruction.PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE;
+import static org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper.Instruction.PROPAGATE_ONLY_IF_FK_VAL_AVAILABLE;
 
-public class KTableRepartitionerProcessorSupplier<K, KO, V> implements ProcessorSupplier<K, Change<V>> {
+public class ForeignJoinSubscriptionSendProcessorSupplier<K, KO, V> implements ProcessorSupplier<K, Change<V>> {
 
     private final ValueMapper<V, KO> mapper;
     private final String repartitionTopicName;
@@ -42,11 +42,11 @@ public class KTableRepartitionerProcessorSupplier<K, KO, V> implements Processor
     private final boolean leftJoin;
     private Serializer<KO> foreignKeySerializer;
 
-    public KTableRepartitionerProcessorSupplier(final ValueMapper<V, KO> extractor,
-                                                final Serde<KO> foreignKeySerde,
-                                                final String repartitionTopicName,
-                                                final Serializer<V> valueSerializer,
-                                                final boolean leftJoin) {
+    public ForeignJoinSubscriptionSendProcessorSupplier(final ValueMapper<V, KO> extractor,
+                                                        final Serde<KO> foreignKeySerde,
+                                                        final String repartitionTopicName,
+                                                        final Serializer<V> valueSerializer,
+                                                        final boolean leftJoin) {
         mapper = extractor;
         this.valueSerializer = valueSerializer;
         this.leftJoin = leftJoin;

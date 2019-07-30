@@ -85,18 +85,16 @@ public class SubscriptionResolverJoinProcessorSupplier<K, V, VO, VR> implements 
 
                 //If this value doesn't match the current value from the original table, it is stale and should be discarded.
                 if (java.util.Arrays.equals(messageHash, currentHash)) {
-                    System.out.println(context().taskId() + "matched " + Arrays.toString(messageHash) + " and " + Arrays.toString(currentHash));
                     final VR result;
 
                     if (value.getForeignValue() == null && !leftJoin ||
                         leftJoin && currentValueWithTimestamp == null && value.getForeignValue() == null) {
+
                         result = null; //Emit tombstone
                     } else {
                         result = joiner.apply(currentValueWithTimestamp == null ? null : currentValueWithTimestamp.value(), value.getForeignValue());
                     }
                     context().forward(key, result);
-                } else {
-                    System.out.println(context().taskId() + "didn't match " + Arrays.toString(messageHash) + " and " + Arrays.toString(currentHash));
                 }
             }
         };

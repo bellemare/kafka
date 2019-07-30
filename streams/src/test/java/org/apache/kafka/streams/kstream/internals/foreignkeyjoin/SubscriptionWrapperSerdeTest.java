@@ -28,6 +28,7 @@ import static org.junit.Assert.assertEquals;
 public class SubscriptionWrapperSerdeTest {
 
     @Test
+    @SuppressWarnings("unchecked")
     public void shouldSerdeTest() {
         final String originalKey = "originalKey";
         final SubscriptionWrapperSerde swSerde = new SubscriptionWrapperSerde<>(Serdes.String());
