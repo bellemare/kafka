@@ -47,7 +47,6 @@ import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionSto
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapper;
 import org.apache.kafka.streams.kstream.internals.foreignkeyjoin.SubscriptionWrapperSerde;
 import org.apache.kafka.streams.kstream.internals.graph.KTableKTableJoinNode;
-import org.apache.kafka.streams.kstream.internals.graph.OptimizableRepartitionNode;
 import org.apache.kafka.streams.kstream.internals.graph.ProcessorGraphNode;
 import org.apache.kafka.streams.kstream.internals.graph.ProcessorParameters;
 import org.apache.kafka.streams.kstream.internals.graph.StatefulProcessorNode;
@@ -903,46 +902,44 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
 
         final NamedInternal renamed = new NamedInternal(joinName);
         final String subscriptionTopicName = renamed.suffixWithOrElseGet("-subscription-registration", builder, SUBSCRIPTION_REGISTRATION) + TOPIC_SUFFIX;
+        builder.internalTopologyBuilder.addInternalTopic(subscriptionTopicName);
         final CombinedKeySchema<KO, K> combinedKeySchema = new CombinedKeySchema<>(subscriptionTopicName, foreignKeySerde, keySerde);
 
-        //Must make a repartitioner processor, and an associated topic with a sink and source processor.
-        final OptimizableRepartitionNode<K, Change<V>, KO, SubscriptionWrapper<K>> sendSubscriptionsToForeignTableNode;
-        {
-            final String repartitionProcessorName = renamed.suffixWithOrElseGet("-subscription-registration-processor", builder, SUBSCRIPTION_REGISTRATION);
-            final String repartitionSinkName = renamed.suffixWithOrElseGet("-subscription-registration-sink", builder, SINK_NAME);
-            final String repartitionSourceName = renamed.suffixWithOrElseGet("-subscription-registration-source", builder, SOURCE_NAME);
-
-            // The repartition source is the source node on the *receiving* end *after* the repartition.
-            // This topic needs to be copartitioned with the Foreign Key table.
-            final Set<String> copartitionedRepartitionSources =
-                new HashSet<>(((KTableImpl<?, ?, ?>) foreignKeyTable).sourceNodes);
-            copartitionedRepartitionSources.add(repartitionSourceName);
-            builder.internalTopologyBuilder.copartitionSources(copartitionedRepartitionSources);
-
-            //Create a processor that generates and sends subscription requests (SubscriptionWrapper) to the
-            //foreign side of the join.
-            final ForeignJoinSubscriptionSendProcessorSupplier<K, KO, V> repartitionProcessor =
-                new ForeignJoinSubscriptionSendProcessorSupplier<>(foreignKeyExtractor,
-                                                                   foreignKeySerde,
-                                                                   subscriptionTopicName,
-                                                                   valSerde.serializer(),
-                                                                   leftJoin);
-
-            sendSubscriptionsToForeignTableNode =
-                new OptimizableRepartitionNode<>(
-                    repartitionSourceName,
-                    repartitionSourceName,
-                    new ProcessorParameters<>(
-                        repartitionProcessor,
-                        repartitionProcessorName
-                    ),
+        final ProcessorGraphNode<K, Change<V>> subscriptionNode = new ProcessorGraphNode<>(
+            new ProcessorParameters<>(
+                new ForeignJoinSubscriptionSendProcessorSupplier<>(
+                    foreignKeyExtractor,
                     foreignKeySerde,
-                    subscriptionWrapperSerde,
-                    repartitionSinkName,
-                    subscriptionTopicName
-                );
-            builder.addGraphNode(streamsGraphNode, sendSubscriptionsToForeignTableNode);
-        }
+                    subscriptionTopicName,
+                    valSerde.serializer(),
+                    leftJoin
+                ),
+                renamed.suffixWithOrElseGet("-subscription-registration-processor", builder, SUBSCRIPTION_REGISTRATION)
+            )
+        );
+        builder.addGraphNode(streamsGraphNode, subscriptionNode);
+
+
+        final StreamSinkNode<KO, SubscriptionWrapper<K>> subscriptionSink = new StreamSinkNode<>(
+            renamed.suffixWithOrElseGet("-subscription-registration-sink", builder, SINK_NAME),
+            new StaticTopicNameExtractor<>(subscriptionTopicName),
+            new ProducedInternal<>(Produced.with(foreignKeySerde, subscriptionWrapperSerde))
+        );
+        builder.addGraphNode(subscriptionNode, subscriptionSink);
+
+        final StreamSourceNode<KO, SubscriptionWrapper<K>> subscriptionSource = new StreamSourceNode<>(
+            renamed.suffixWithOrElseGet("-subscription-registration-source", builder, SOURCE_NAME),
+            Collections.singleton(subscriptionTopicName),
+            new ConsumedInternal<>(Consumed.with(foreignKeySerde, subscriptionWrapperSerde))
+        );
+        builder.addGraphNode(subscriptionSink, subscriptionSource);
+
+        // The subscription source is the source node on the *receiving* end *after* the repartition.
+        // This topic needs to be copartitioned with the Foreign Key table.
+        final Set<String> copartitionedRepartitionSources =
+            new HashSet<>(((KTableImpl<?, ?, ?>) foreignKeyTable).sourceNodes);
+        copartitionedRepartitionSources.add(subscriptionSource.nodeName());
+        builder.internalTopologyBuilder.copartitionSources(copartitionedRepartitionSources);
 
 
         final StoreBuilder<TimestampedKeyValueStore<Bytes, SubscriptionWrapper<K>>> subscriptionStore =
@@ -964,7 +961,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
                 Collections.singleton(subscriptionStore),
                 Collections.emptySet()
             );
-        builder.addGraphNode(sendSubscriptionsToForeignTableNode, subscriptionReceiveNode);
+        builder.addGraphNode(subscriptionSource, subscriptionReceiveNode);
 
         final StatefulProcessorNode<CombinedKey<KO, K>, Change<ValueAndTimestamp<SubscriptionWrapper<K>>>> subscriptionJoinForeignNode =
             new StatefulProcessorNode<>(
