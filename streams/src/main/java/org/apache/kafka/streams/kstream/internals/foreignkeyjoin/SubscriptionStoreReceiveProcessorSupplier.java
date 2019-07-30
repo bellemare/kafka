@@ -34,7 +34,7 @@ import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SubscriptionStoreReceiveProcessorSupplier<K, KO, VO>
+public class SubscriptionStoreReceiveProcessorSupplier<K, KO>
     implements ProcessorSupplier<KO, SubscriptionWrapper<K>> {
     private static final Logger LOG = LoggerFactory.getLogger(SubscriptionStoreReceiveProcessorSupplier.class);
 
@@ -58,7 +58,7 @@ public class SubscriptionStoreReceiveProcessorSupplier<K, KO, VO>
             @Override
             public void init(final ProcessorContext context) {
                 super.init(context);
-                final InternalProcessorContext internalProcessorContext = ((InternalProcessorContext) context);
+                final InternalProcessorContext internalProcessorContext = (InternalProcessorContext) context;
 
                 metrics = internalProcessorContext.metrics();
                 skippedRecordsSensor = ThreadMetrics.skipRecordSensor(metrics);

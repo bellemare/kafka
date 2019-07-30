@@ -26,9 +26,6 @@ import org.apache.kafka.streams.processor.Processor;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.To;
-import org.apache.kafka.streams.processor.internals.InternalProcessorContext;
-import org.apache.kafka.streams.state.StoreBuilder;
-import org.apache.kafka.streams.state.TimestampedKeyValueStore;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
 
 import java.util.Objects;
@@ -36,14 +33,9 @@ import java.util.Objects;
 public class SubscriptionJoinForeignProcessorSupplier<K, KO, VO>
     implements ProcessorSupplier<CombinedKey<KO, K>, Change<ValueAndTimestamp<SubscriptionWrapper<K>>>> {
 
-    private final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> storeBuilder;
     private final KTableValueGetterSupplier<KO, VO> foreignValueGetterSupplier;
 
-    public SubscriptionJoinForeignProcessorSupplier(
-        final StoreBuilder<TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>>> storeBuilder,
-        final KTableValueGetterSupplier<KO, VO> foreignValueGetterSupplier) {
-
-        this.storeBuilder = storeBuilder;
+    public SubscriptionJoinForeignProcessorSupplier(final KTableValueGetterSupplier<KO, VO> foreignValueGetterSupplier) {
         this.foreignValueGetterSupplier = foreignValueGetterSupplier;
     }
 
@@ -52,16 +44,13 @@ public class SubscriptionJoinForeignProcessorSupplier<K, KO, VO>
 
         return new AbstractProcessor<CombinedKey<KO, K>, Change<ValueAndTimestamp<SubscriptionWrapper<K>>>>() {
 
-            private TimestampedKeyValueStore<CombinedKey<KO, K>, SubscriptionWrapper<K>> store;
             private KTableValueGetter<KO, VO> foreignValues;
 
             @Override
             public void init(final ProcessorContext context) {
                 super.init(context);
-                final InternalProcessorContext internalProcessorContext = ((InternalProcessorContext) context);
                 foreignValues = foreignValueGetterSupplier.get();
                 foreignValues.init(context);
-                store = internalProcessorContext.getStateStore(storeBuilder);
             }
 
             @Override

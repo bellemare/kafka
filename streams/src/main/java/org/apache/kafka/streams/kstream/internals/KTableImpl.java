@@ -872,6 +872,7 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
     }
 
 
+    @SuppressWarnings("unchecked")
     private <VR, KO, VO> KTable<K, VR> doJoinOnForeignKey(final KTable<KO, VO> foreignKeyTable,
                                                           final ValueMapper<V, KO> foreignKeyExtractor,
                                                           final ValueJoiner<V, VO, VR> joiner,
@@ -967,7 +968,6 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
             new StatefulProcessorNode<>(
                 new ProcessorParameters<>(
                     new SubscriptionJoinForeignProcessorSupplier<>(
-                        subscriptionStore,
                         ((KTableImpl<KO, VO, VO>) foreignKeyTable).valueGetterSupplier()
                     ),
                     renamed.suffixWithOrElseGet("-subscription-join-foreign", builder, SUBSCRIPTION_PROCESSOR)
