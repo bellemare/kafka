@@ -69,6 +69,7 @@ versions += [
   gradle: "5.6.2",
   gradleVersionsPlugin: "0.21.0",
   grgit: "3.1.1",
+  guava: "19.0",
   httpclient: "4.5.9",
   easymock: "4.0.2",
   jackson: "2.10.0",
